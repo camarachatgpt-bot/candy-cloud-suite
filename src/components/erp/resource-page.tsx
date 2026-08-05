@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -11,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 export function ResourcePage<T>({
   title,
   description,
-  icon,
   columns,
   rows,
   loading,
@@ -24,7 +22,6 @@ export function ResourcePage<T>({
 }: {
   title: string;
   description: string;
-  icon?: LucideIcon | undefined;
   columns: Column<T>[];
   rows: T[];
   loading?: boolean | undefined;
