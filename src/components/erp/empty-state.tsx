@@ -8,10 +8,10 @@ export function EmptyState({
   icon: Icon = Inbox,
   action,
 }: {
-  title?: string;
-  description?: string;
-  icon?: LucideIcon;
-  action?: ReactNode;
+  title?: string | undefined;
+  description?: string | undefined;
+  icon?: LucideIcon | undefined;
+  action?: ReactNode | undefined;
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/70 px-6 py-14 text-center animate-in fade-in duration-300">

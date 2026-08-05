@@ -13,11 +13,11 @@ export function FormField({
 }: {
   id: string;
   label: string;
-  placeholder?: string;
-  type?: string;
+  placeholder?: string | undefined;
+  type?: string | undefined;
   value: string;
   onChange: (value: string) => void;
-  textarea?: boolean;
+  textarea?: boolean | undefined;
 }) {
   return (
     <div className="space-y-2">

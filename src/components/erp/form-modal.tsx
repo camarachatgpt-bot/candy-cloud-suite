@@ -27,11 +27,11 @@ export function FormModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  description?: string;
+  description?: string | undefined;
   children: ReactNode;
   onSubmit: () => void;
-  submitLabel?: string;
-  submitting?: boolean;
+  submitLabel?: string | undefined;
+  submitting?: boolean | undefined;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

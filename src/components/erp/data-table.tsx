@@ -29,11 +29,11 @@ export function DataTable<T>({
 }: {
   columns: Column<T>[];
   rows: T[];
-  loading?: boolean;
+  loading?: boolean | undefined;
   getRowId: (row: T, index: number) => string;
-  emptyTitle?: string;
-  emptyDescription?: string;
-  emptyAction?: ReactNode;
+  emptyTitle?: string | undefined;
+  emptyDescription?: string | undefined;
+  emptyAction?: ReactNode | undefined;
 }) {
   if (loading) {
     return (

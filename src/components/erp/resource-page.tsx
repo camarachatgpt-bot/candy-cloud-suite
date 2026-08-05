@@ -24,16 +24,16 @@ export function ResourcePage<T>({
 }: {
   title: string;
   description: string;
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
   columns: Column<T>[];
   rows: T[];
-  loading?: boolean;
+  loading?: boolean | undefined;
   getRowId: (row: T, index: number) => string;
-  actionLabel?: string;
-  onAction?: () => void;
-  emptyDescription?: string;
-  children?: ReactNode;
-  toolbar?: ReactNode;
+  actionLabel?: string | undefined;
+  onAction?: (() => void) | undefined;
+  emptyDescription?: string | undefined;
+  children?: ReactNode | undefined;
+  toolbar?: ReactNode | undefined;
 }) {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -68,7 +68,7 @@ export function ResourcePage<T>({
                   <Plus className="h-4 w-4" />
                   {actionLabel}
                 </Button>
-              ) : icon ? undefined : undefined
+              ) : undefined
             }
           />
         </CardContent>

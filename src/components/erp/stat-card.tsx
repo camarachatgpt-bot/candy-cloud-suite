@@ -15,9 +15,9 @@ export function StatCard({
   label: string;
   value: ReactNode;
   icon: LucideIcon;
-  hint?: string;
-  loading?: boolean;
-  footer?: ReactNode;
+  hint?: string | undefined;
+  loading?: boolean | undefined;
+  footer?: ReactNode | undefined;
 }) {
   return (
     <Card className="rounded-2xl border-border/70 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]">
