@@ -35,10 +35,10 @@ export const Route = createFileRoute("/")({
 });
 
 const kpis = [
-  { label: "Faturamento do mês", value: "R$ 84.320", delta: "+12,4%", icon: DollarSign },
-  { label: "Pedidos", value: "1.284", delta: "+8,1%", icon: ShoppingCart },
-  { label: "Cookies produzidos", value: "23.560", delta: "+5,7%", icon: Cookie },
-  { label: "Clientes ativos", value: "612", delta: "+3,2%", icon: Users },
+  { label: "Faturamento Hoje", value: "R$ 3.280", delta: "+12,4%", icon: DollarSign },
+  { label: "Lucro Hoje", value: "R$ 1.804", delta: "+9,8%", icon: TrendingUp },
+  { label: "Pedidos Hoje", value: "42", delta: "+8,1%", icon: ShoppingCart },
+  { label: "Cookies Vendidos Hoje", value: "1.560", delta: "+5,7%", icon: Cookie },
 ];
 
 const topProdutos = [
