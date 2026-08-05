@@ -30,6 +30,8 @@ import {
 const operacao = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Produtos", url: "/produtos", icon: Cookie },
+  { title: "Ingredientes", url: "/ingredientes", icon: Package },
+  { title: "Receitas", url: "/receitas", icon: Package },
   { title: "Estoque", url: "/estoque", icon: Package },
   { title: "Vendas", url: "/vendas", icon: ShoppingCart },
 ] as const;

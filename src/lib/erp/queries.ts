@@ -5,7 +5,14 @@ import { erpRepository } from "./repository";
 export const erpQueries = {
   produtos: () => queryOptions({ queryKey: ["produtos"], queryFn: erpRepository.produtos }),
   estoque: () => queryOptions({ queryKey: ["estoque"], queryFn: erpRepository.estoque }),
+  ingredientes: () => queryOptions({ queryKey: ["ingredientes"], queryFn: erpRepository.ingredientes }),
+  receitas: () => queryOptions({ queryKey: ["receitas"], queryFn: erpRepository.receitas }),
   clientes: () => queryOptions({ queryKey: ["clientes"], queryFn: erpRepository.clientes }),
+  movimentacoesEstoque: () =>
+    queryOptions({
+      queryKey: ["movimentacoes-estoque"],
+      queryFn: erpRepository.movimentacoesEstoque,
+    }),
   fornecedores: () =>
     queryOptions({ queryKey: ["fornecedores"], queryFn: erpRepository.fornecedores }),
   vendas: () => queryOptions({ queryKey: ["vendas"], queryFn: erpRepository.vendas }),

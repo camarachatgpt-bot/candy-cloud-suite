@@ -16,11 +16,14 @@ import type {
   Cliente,
   DashboardTopProduto,
   Fornecedor,
+  Ingrediente,
   ItemEstoque,
   ItemVenda,
   Lancamento,
   Meta,
+  MovimentacaoEstoque,
   Produto,
+  Receita,
   ResumoDashboard,
   Venda,
 } from "./types";
@@ -121,6 +124,143 @@ async function buscarCustoUnitarioProduto(produtoId: string): Promise<number> {
   return Number(data?.preco_custo ?? 0);
 }
 
+async function registrarMovimentacaoEstoque(input: {
+  empresa_id: string | null;
+  ingrediente_id: string;
+  tipo: "entrada" | "saída" | "ajuste";
+  origem: "Venda" | "Compra" | "Ajuste";
+  documento: string | null;
+  quantidade: number;
+  estoque_anterior: number;
+  estoque_posterior: number;
+  observacao: string | null;
+}): Promise<void> {
+  const { error } = await supabase.from("movimentacoes_estoque").insert([
+    {
+      empresa_id: input.empresa_id,
+      ingrediente_id: input.ingrediente_id,
+      tipo: input.tipo,
+      origem: input.origem,
+      documento: input.documento,
+      quantidade: input.quantidade,
+      estoque_anterior: input.estoque_anterior,
+      estoque_posterior: input.estoque_posterior,
+      observacao: input.observacao,
+    },
+  ]);
+
+  if (error) throw error;
+}
+
+async function calcularBaixaEstoqueVenda(
+  itens: Array<{
+    produto_id: string;
+    quantidade: number;
+  }>,
+): Promise<Map<string, number>> {
+  const receitasPorProduto = await Promise.all(
+    itens.map(async (item) => {
+      const { data, error } = await supabase
+        .from("receitas")
+        .select("ingrediente_id, quantidade, rendimento")
+        .eq("produto_id", item.produto_id);
+
+      if (error) throw error;
+
+      return (data ?? []).map((receita) => ({
+        ingrediente_id: receita.ingrediente_id as string,
+        quantidade: Number(receita.quantidade ?? 0),
+        rendimento: Number(receita.rendimento ?? 0),
+        quantidadeVendida: Number(item.quantidade ?? 0),
+      }));
+    }),
+  );
+
+  const reducoesPorIngrediente = new Map<string, number>();
+
+  for (const receitas of receitasPorProduto) {
+    for (const receita of receitas) {
+      if (!receita.ingrediente_id || receita.rendimento <= 0 || receita.quantidade <= 0) {
+        continue;
+      }
+
+      const quantidadeParaBaixar = (receita.quantidade / receita.rendimento) * receita.quantidadeVendida;
+      const quantidadeAtual = reducoesPorIngrediente.get(receita.ingrediente_id) ?? 0;
+      reducoesPorIngrediente.set(receita.ingrediente_id, quantidadeAtual + quantidadeParaBaixar);
+    }
+  }
+
+  const ingredienteIds = [...reducoesPorIngrediente.keys()];
+
+  if (ingredienteIds.length === 0) {
+    return reducoesPorIngrediente;
+  }
+
+  const { data: ingredientes, error: ingredientesError } = await supabase
+    .from("ingredientes")
+    .select("id, nome, quantidade")
+    .in("id", ingredienteIds);
+
+  if (ingredientesError) throw ingredientesError;
+
+  for (const ingrediente of ingredientes ?? []) {
+    const ingredienteId = ingrediente.id as string;
+    const quantidadeNecessaria = reducoesPorIngrediente.get(ingredienteId) ?? 0;
+    const quantidadeDisponivel = Number(ingrediente.quantidade ?? 0);
+
+    if (quantidadeDisponivel < quantidadeNecessaria) {
+      throw new Error(
+        `Estoque insuficiente para ${ingrediente.nome ?? "ingrediente"}. Disponível: ${quantidadeDisponivel}. Necessário: ${quantidadeNecessaria}.`,
+      );
+    }
+  }
+
+  return reducoesPorIngrediente;
+}
+
+async function aplicarBaixaEstoqueVenda(
+  vendaId: string,
+  reducoesPorIngrediente: Map<string, number>,
+): Promise<void> {
+  for (const [ingredienteId, quantidadeParaBaixar] of reducoesPorIngrediente.entries()) {
+    const { data: ingredienteAtual, error: ingredienteError } = await supabase
+      .from("ingredientes")
+      .select("quantidade, nome")
+      .eq("id", ingredienteId)
+      .maybeSingle();
+
+    if (ingredienteError) throw ingredienteError;
+
+    const estoqueAnterior = Number(ingredienteAtual?.quantidade ?? 0);
+    const estoquePosterior = estoqueAnterior - quantidadeParaBaixar;
+
+    if (estoqueAnterior < quantidadeParaBaixar) {
+      throw new Error(
+        `Estoque insuficiente para ${ingredienteAtual?.nome ?? "ingrediente"}. Disponível: ${estoqueAnterior}. Necessário: ${quantidadeParaBaixar}.`,
+      );
+    }
+
+    const { error: updateError } = await supabase
+      .from("ingredientes")
+      .update({ quantidade: estoquePosterior })
+      .eq("id", ingredienteId);
+
+    if (updateError) throw updateError;
+
+    await registrarMovimentacaoEstoque({
+      empresa_id: null,
+      ingrediente_id: ingredienteId,
+      tipo: "saída",
+      origem: "Venda",
+      documento: `venda-${vendaId}`,
+      quantidade: quantidadeParaBaixar,
+      estoque_anterior: estoqueAnterior,
+      estoque_posterior: estoquePosterior,
+      observacao: "Baixa automática por venda.",
+    });
+  }
+}
+
 export const erpRepository = {
   produtos: async (): Promise<Produto[]> => {
     const { data, error } = await supabase.from("produtos").select("*").order("nome");
@@ -174,7 +314,387 @@ export const erpRepository = {
     };
   },
 
-  estoque: () => empty<ItemEstoque>(),
+  receitas: async (): Promise<Receita[]> => {
+    const [receitasResult, produtosResult, ingredientesResult] = await Promise.all([
+      supabase.from("receitas").select("*").order("created_at", { ascending: false }),
+      supabase.from("produtos").select("id, nome").order("nome"),
+      supabase.from("ingredientes").select("id, nome, unidade, custo_unitario").order("nome"),
+    ]);
+
+    if (receitasResult.error) throw receitasResult.error;
+    if (produtosResult.error) throw produtosResult.error;
+    if (ingredientesResult.error) throw ingredientesResult.error;
+
+    const produtosById = new Map<string, string>(
+      (produtosResult.data ?? []).map((item) => [item.id as string, (item.nome as string) ?? "Produto"]),
+    );
+
+    const ingredientesById = new Map<string, Record<string, unknown>>(
+      (ingredientesResult.data ?? []).map((item) => [item.id as string, item]),
+    );
+
+    const groupedByProduto = new Map<string, Receita>();
+
+    for (const item of receitasResult.data ?? []) {
+      if (item.ativo === false) {
+        continue;
+      }
+
+      const produtoId = item.produto_id as string;
+      const existing = groupedByProduto.get(produtoId);
+      const ingrediente = ingredientesById.get(item.ingrediente_id as string);
+
+      const receitaIngrediente = {
+        id: item.id as string,
+        ingrediente_id: item.ingrediente_id as string,
+        nome: (ingrediente?.nome as string) ?? "Ingrediente",
+        unidade: (ingrediente?.unidade as string) ?? "un",
+        quantidade: Number(item.quantidade ?? 0),
+        custo_unitario: Number(ingrediente?.custo_unitario ?? 0),
+      };
+
+      if (existing) {
+        existing.ingredientes.push(receitaIngrediente);
+        continue;
+      }
+
+      groupedByProduto.set(produtoId, {
+        id: produtoId,
+        empresa_id: item.empresa_id ?? null,
+        produto_id: produtoId,
+        produto_nome: produtosById.get(produtoId) ?? "Produto",
+        rendimento: Number(item.rendimento ?? 0),
+        custo_total: Number(item.custo_total ?? 0),
+        custo_por_unidade: Number(item.custo_por_unidade ?? 0),
+        ingredientes: [receitaIngrediente],
+        ativo: item.ativo !== false,
+        created_at: item.created_at,
+      });
+    }
+
+    return [...groupedByProduto.values()]
+      .map((receita) => {
+        const custoTotal = receita.custo_total > 0
+          ? receita.custo_total
+          : receita.ingredientes.reduce((total, ingrediente) => {
+              return total + ingrediente.custo_unitario * ingrediente.quantidade;
+            }, 0);
+
+        const custoPorUnidade = receita.custo_por_unidade > 0
+          ? receita.custo_por_unidade
+          : receita.rendimento > 0
+            ? custoTotal / receita.rendimento
+            : custoTotal;
+
+        return {
+          ...receita,
+          custo_total: custoTotal,
+          custo_por_unidade: custoPorUnidade,
+        };
+      })
+      .sort((left, right) => left.produto_nome.localeCompare(right.produto_nome));
+  },
+
+  async createReceita(input: {
+    empresa_id: string | null;
+    produto_id: string;
+    rendimento: number;
+    itens: Array<{
+      ingrediente_id: string;
+      quantidade: number;
+    }>;
+  }): Promise<Receita> {
+    const ingredientIds = [...new Set(input.itens.map((item) => item.ingrediente_id))];
+    const [ingredientesResult, produtoResult] = await Promise.all([
+      supabase.from("ingredientes").select("id, nome, unidade, custo_unitario").in("id", ingredientIds),
+      supabase.from("produtos").select("id, nome").eq("id", input.produto_id).maybeSingle(),
+    ]);
+
+    if (ingredientesResult.error) throw ingredientesResult.error;
+    if (produtoResult.error) throw produtoResult.error;
+
+    const custoPorIngrediente = new Map(
+      (ingredientesResult.data ?? []).map((item) => [item.id, Number(item.custo_unitario ?? 0)]),
+    );
+
+    const totalCusto = input.itens.reduce((total, item) => {
+      const custoUnitario = custoPorIngrediente.get(item.ingrediente_id) ?? 0;
+      return total + custoUnitario * Number(item.quantidade ?? 0);
+    }, 0);
+
+    const custoPorUnidade = Number(input.rendimento ?? 0) > 0 ? totalCusto / Number(input.rendimento) : totalCusto;
+
+    const rows = input.itens.map((item) => ({
+      empresa_id: input.empresa_id,
+      produto_id: input.produto_id,
+      ingrediente_id: item.ingrediente_id,
+      quantidade: item.quantidade,
+      rendimento: Number(input.rendimento ?? 0),
+      custo_total: totalCusto,
+      custo_por_unidade: custoPorUnidade,
+    }));
+
+    const { error } = await supabase.from("receitas").insert(rows);
+
+    if (error) throw error;
+
+    const { error: updateError } = await supabase
+      .from("produtos")
+      .update({ preco_custo: custoPorUnidade })
+      .eq("id", input.produto_id);
+
+    if (updateError) throw updateError;
+
+    const ingredientes = (ingredientesResult.data ?? []).map((item) => ({
+      id: item.id,
+      ingrediente_id: item.id,
+      nome: item.nome,
+      unidade: item.unidade,
+      quantidade: Number(
+        input.itens.find((recipeItem) => recipeItem.ingrediente_id === item.id)?.quantidade ?? 0,
+      ),
+      custo_unitario: Number(item.custo_unitario ?? 0),
+    }));
+
+    return {
+      id: input.produto_id,
+      empresa_id: input.empresa_id,
+      produto_id: input.produto_id,
+      produto_nome: produtoResult.data?.nome ?? "Produto",
+      rendimento: Number(input.rendimento ?? 0),
+      custo_total: totalCusto,
+      custo_por_unidade: custoPorUnidade,
+      ingredientes,
+      ativo: true,
+      created_at: new Date().toISOString(),
+    };
+  },
+
+  async updateReceita(id: string, input: {
+    empresa_id: string | null;
+    produto_id: string;
+    rendimento: number;
+    itens: Array<{
+      ingrediente_id: string;
+      quantidade: number;
+    }>;
+  }): Promise<Receita> {
+    const { error: deleteError } = await supabase.from("receitas").delete().eq("produto_id", id);
+
+    if (deleteError) throw deleteError;
+
+    return this.createReceita({
+      empresa_id: input.empresa_id,
+      produto_id: input.produto_id,
+      rendimento: input.rendimento,
+      itens: input.itens,
+    });
+  },
+
+  async deleteReceita(id: string): Promise<void> {
+    const { error } = await supabase.from("receitas").update({ ativo: false }).eq("produto_id", id);
+
+    if (error) {
+      const { error: fallbackError } = await supabase.from("receitas").delete().eq("produto_id", id);
+
+      if (fallbackError) throw fallbackError;
+    }
+  },
+
+  estoque: async (): Promise<ItemEstoque[]> => {
+    const { data, error } = await supabase
+      .from("ingredientes")
+      .select("id, nome, unidade, quantidade, estoque_minimo, created_at")
+      .eq("ativo", true)
+      .order("nome");
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      insumo: item.nome,
+      unidade: item.unidade,
+      quantidade: Number(item.quantidade ?? 0),
+      minimo: Number(item.estoque_minimo ?? 0),
+      atualizado_em: item.created_at,
+    }));
+  },
+
+  ingredientes: async (): Promise<Ingrediente[]> => {
+    const { data, error } = await supabase.from("ingredientes").select("*").eq("ativo", true).order("nome");
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      empresa_id: item.empresa_id ?? null,
+      nome: item.nome,
+      categoria: item.categoria ?? null,
+      unidade: item.unidade,
+      quantidade: Number(item.quantidade ?? 0),
+      estoque_minimo: Number(item.estoque_minimo ?? 0),
+      custo_unitario: Number(item.custo_unitario ?? 0),
+      fornecedor: item.fornecedor ?? null,
+      ativo: item.ativo,
+      created_at: item.created_at,
+    }));
+  },
+
+  movimentacoesEstoque: async (): Promise<MovimentacaoEstoque[]> => {
+    const { data, error } = await supabase
+      .from("movimentacoes_estoque")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      empresa_id: item.empresa_id ?? null,
+      ingrediente_id: item.ingrediente_id,
+      tipo: item.tipo,
+      origem: item.origem,
+      documento: item.documento ?? null,
+      quantidade: Number(item.quantidade ?? 0),
+      estoque_anterior: Number(item.estoque_anterior ?? 0),
+      estoque_posterior: Number(item.estoque_posterior ?? 0),
+      observacao: item.observacao ?? null,
+      created_at: item.created_at,
+    }));
+  },
+
+  async createIngrediente(input: {
+    empresa_id: string | null;
+    nome: string;
+    categoria: string | null;
+    unidade: string;
+    quantidade: number;
+    estoque_minimo: number;
+    custo_unitario: number;
+    fornecedor: string | null;
+    ativo: boolean;
+  }): Promise<Ingrediente> {
+    const { data, error } = await supabase
+      .from("ingredientes")
+      .insert([
+        {
+          empresa_id: input.empresa_id,
+          nome: input.nome,
+          categoria: input.categoria,
+          unidade: input.unidade,
+          quantidade: input.quantidade,
+          estoque_minimo: input.estoque_minimo,
+          custo_unitario: input.custo_unitario,
+          fornecedor: input.fornecedor,
+          ativo: input.ativo,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await registrarMovimentacaoEstoque({
+      empresa_id: input.empresa_id,
+      ingrediente_id: data.id,
+      tipo: "entrada",
+      origem: "Compra",
+      documento: `compra-${data.id}`,
+      quantidade: Number(input.quantidade ?? 0),
+      estoque_anterior: 0,
+      estoque_posterior: Number(input.quantidade ?? 0),
+      observacao: "Entrada inicial de estoque cadastrada.",
+    });
+
+    return {
+      id: data.id,
+      empresa_id: data.empresa_id ?? null,
+      nome: data.nome,
+      categoria: data.categoria ?? null,
+      unidade: data.unidade,
+      quantidade: Number(data.quantidade ?? 0),
+      estoque_minimo: Number(data.estoque_minimo ?? 0),
+      custo_unitario: Number(data.custo_unitario ?? 0),
+      fornecedor: data.fornecedor ?? null,
+      ativo: data.ativo,
+      created_at: data.created_at,
+    };
+  },
+
+  async updateIngrediente(id: string, input: {
+    nome: string;
+    categoria: string | null;
+    unidade: string;
+    quantidade: number;
+    estoque_minimo: number;
+    custo_unitario: number;
+    fornecedor: string | null;
+    ativo: boolean;
+  }): Promise<Ingrediente> {
+    const { data: ingredienteAtual, error: fetchError } = await supabase
+      .from("ingredientes")
+      .select("quantidade, nome")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    const estoqueAnterior = Number(ingredienteAtual?.quantidade ?? 0);
+    const estoquePosterior = Number(input.quantidade ?? 0);
+    const diferencaQuantidade = estoquePosterior - estoqueAnterior;
+
+    const { data, error } = await supabase
+      .from("ingredientes")
+      .update({
+        nome: input.nome,
+        categoria: input.categoria,
+        unidade: input.unidade,
+        quantidade: input.quantidade,
+        estoque_minimo: input.estoque_minimo,
+        custo_unitario: input.custo_unitario,
+        fornecedor: input.fornecedor,
+        ativo: input.ativo,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (diferencaQuantidade !== 0) {
+      await registrarMovimentacaoEstoque({
+        empresa_id: data.empresa_id ?? null,
+        ingrediente_id: id,
+        tipo: "ajuste",
+        origem: "Ajuste",
+        documento: `ajuste-${id}`,
+        quantidade: Math.abs(diferencaQuantidade),
+        estoque_anterior: estoqueAnterior,
+        estoque_posterior: estoquePosterior,
+        observacao: diferencaQuantidade > 0 ? "Ajuste positivo de estoque." : "Ajuste negativo de estoque.",
+      });
+    }
+
+    return {
+      id: data.id,
+      empresa_id: data.empresa_id ?? null,
+      nome: data.nome,
+      categoria: data.categoria ?? null,
+      unidade: data.unidade,
+      quantidade: Number(data.quantidade ?? 0),
+      estoque_minimo: Number(data.estoque_minimo ?? 0),
+      custo_unitario: Number(data.custo_unitario ?? 0),
+      fornecedor: data.fornecedor ?? null,
+      ativo: data.ativo,
+      created_at: data.created_at,
+    };
+  },
+
+  async deleteIngrediente(id: string): Promise<void> {
+    const { error } = await supabase.from("ingredientes").update({ ativo: false }).eq("id", id);
+
+    if (error) throw error;
+  },
 
   clientes: async (): Promise<Cliente[]> => {
     const { data, error } = await supabase.from("clientes").select("*").order("nome");
@@ -271,6 +791,13 @@ export const erpRepository = {
       subtotal: number;
     }>;
   }): Promise<Venda> {
+    const reducoesPorIngrediente = await calcularBaixaEstoqueVenda(
+      input.itens.map((item) => ({
+        produto_id: item.produto_id,
+        quantidade: item.quantidade,
+      })),
+    );
+
     const vendaPayload = {
       numero: input.numero,
       cliente_id: input.cliente_id,
@@ -310,6 +837,7 @@ export const erpRepository = {
     );
 
     await persistItensVenda(itensParaInserir);
+    await aplicarBaixaEstoqueVenda(vendaId, reducoesPorIngrediente);
 
     return {
       id: vendaCriada.id,

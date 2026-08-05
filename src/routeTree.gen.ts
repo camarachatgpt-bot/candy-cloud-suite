@@ -15,9 +15,11 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as FornecedoresRouteImport } from './routes/fornecedores'
+import { Route as IngredientesRouteImport } from './routes/ingredientes'
 import { Route as InteligenciaRouteImport } from './routes/inteligencia'
 import { Route as MetasRouteImport } from './routes/metas'
 import { Route as ProdutosRouteImport } from './routes/produtos'
+import { Route as ReceitasRouteImport } from './routes/receitas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as VendasIndexRouteImport } from './routes/vendas.index'
@@ -53,6 +55,11 @@ const FornecedoresRoute = FornecedoresRouteImport.update({
   path: '/fornecedores',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IngredientesRoute = IngredientesRouteImport.update({
+  id: '/ingredientes',
+  path: '/ingredientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InteligenciaRoute = InteligenciaRouteImport.update({
   id: '/inteligencia',
   path: '/inteligencia',
@@ -66,6 +73,11 @@ const MetasRoute = MetasRouteImport.update({
 const ProdutosRoute = ProdutosRouteImport.update({
   id: '/produtos',
   path: '/produtos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceitasRoute = ReceitasRouteImport.update({
+  id: '/receitas',
+  path: '/receitas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RelatoriosRoute = RelatoriosRouteImport.update({
@@ -96,9 +108,11 @@ export interface FileRoutesByFullPath {
   '/estoque': typeof EstoqueRoute
   '/financeiro': typeof FinanceiroRoute
   '/fornecedores': typeof FornecedoresRoute
+  '/ingredientes': typeof IngredientesRoute
   '/inteligencia': typeof InteligenciaRoute
   '/metas': typeof MetasRoute
   '/produtos': typeof ProdutosRoute
+  '/receitas': typeof ReceitasRoute
   '/relatorios': typeof RelatoriosRoute
   '/vendas': typeof VendasRouteWithChildren
   '/vendas/nova': typeof VendasNovaRoute
@@ -111,9 +125,11 @@ export interface FileRoutesByTo {
   '/estoque': typeof EstoqueRoute
   '/financeiro': typeof FinanceiroRoute
   '/fornecedores': typeof FornecedoresRoute
+  '/ingredientes': typeof IngredientesRoute
   '/inteligencia': typeof InteligenciaRoute
   '/metas': typeof MetasRoute
   '/produtos': typeof ProdutosRoute
+  '/receitas': typeof ReceitasRoute
   '/relatorios': typeof RelatoriosRoute
   '/vendas/nova': typeof VendasNovaRoute
   '/vendas': typeof VendasIndexRoute
@@ -126,9 +142,11 @@ export interface FileRoutesById {
   '/estoque': typeof EstoqueRoute
   '/financeiro': typeof FinanceiroRoute
   '/fornecedores': typeof FornecedoresRoute
+  '/ingredientes': typeof IngredientesRoute
   '/inteligencia': typeof InteligenciaRoute
   '/metas': typeof MetasRoute
   '/produtos': typeof ProdutosRoute
+  '/receitas': typeof ReceitasRoute
   '/relatorios': typeof RelatoriosRoute
   '/vendas': typeof VendasRouteWithChildren
   '/vendas/nova': typeof VendasNovaRoute
@@ -143,9 +161,11 @@ export interface FileRouteTypes {
     | '/estoque'
     | '/financeiro'
     | '/fornecedores'
+    | '/ingredientes'
     | '/inteligencia'
     | '/metas'
     | '/produtos'
+    | '/receitas'
     | '/relatorios'
     | '/vendas'
     | '/vendas/nova'
@@ -158,9 +178,11 @@ export interface FileRouteTypes {
     | '/estoque'
     | '/financeiro'
     | '/fornecedores'
+    | '/ingredientes'
     | '/inteligencia'
     | '/metas'
     | '/produtos'
+    | '/receitas'
     | '/relatorios'
     | '/vendas/nova'
     | '/vendas'
@@ -172,9 +194,11 @@ export interface FileRouteTypes {
     | '/estoque'
     | '/financeiro'
     | '/fornecedores'
+    | '/ingredientes'
     | '/inteligencia'
     | '/metas'
     | '/produtos'
+    | '/receitas'
     | '/relatorios'
     | '/vendas'
     | '/vendas/nova'
@@ -188,9 +212,11 @@ export interface RootRouteChildren {
   EstoqueRoute: typeof EstoqueRoute
   FinanceiroRoute: typeof FinanceiroRoute
   FornecedoresRoute: typeof FornecedoresRoute
+  IngredientesRoute: typeof IngredientesRoute
   InteligenciaRoute: typeof InteligenciaRoute
   MetasRoute: typeof MetasRoute
   ProdutosRoute: typeof ProdutosRoute
+  ReceitasRoute: typeof ReceitasRoute
   RelatoriosRoute: typeof RelatoriosRoute
   VendasRoute: typeof VendasRouteWithChildren
 }
@@ -239,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FornecedoresRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ingredientes': {
+      id: '/ingredientes'
+      path: '/ingredientes'
+      fullPath: '/ingredientes'
+      preLoaderRoute: typeof IngredientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inteligencia': {
       id: '/inteligencia'
       path: '/inteligencia'
@@ -258,6 +291,13 @@ declare module '@tanstack/react-router' {
       path: '/produtos'
       fullPath: '/produtos'
       preLoaderRoute: typeof ProdutosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receitas': {
+      id: '/receitas'
+      path: '/receitas'
+      fullPath: '/receitas'
+      preLoaderRoute: typeof ReceitasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/relatorios': {
@@ -311,9 +351,11 @@ const rootRouteChildren: RootRouteChildren = {
   EstoqueRoute: EstoqueRoute,
   FinanceiroRoute: FinanceiroRoute,
   FornecedoresRoute: FornecedoresRoute,
+  IngredientesRoute: IngredientesRoute,
   InteligenciaRoute: InteligenciaRoute,
   MetasRoute: MetasRoute,
   ProdutosRoute: ProdutosRoute,
+  ReceitasRoute: ReceitasRoute,
   RelatoriosRoute: RelatoriosRoute,
   VendasRoute: VendasRouteWithChildren,
 }

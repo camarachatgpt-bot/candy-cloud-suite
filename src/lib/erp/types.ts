@@ -25,6 +25,56 @@ export interface ItemEstoque {
   atualizado_em: string;
 }
 
+export interface MovimentacaoEstoque {
+  id: UUID;
+  empresa_id: UUID | null;
+  ingrediente_id: UUID;
+  tipo: "entrada" | "saída" | "ajuste";
+  origem: "Venda" | "Compra" | "Ajuste";
+  documento: string | null;
+  quantidade: number;
+  estoque_anterior: number;
+  estoque_posterior: number;
+  observacao: string | null;
+  created_at: string;
+}
+
+export interface Ingrediente {
+  id: UUID;
+  empresa_id: UUID | null;
+  nome: string;
+  categoria: string | null;
+  unidade: string;
+  quantidade: number;
+  estoque_minimo: number;
+  custo_unitario: number;
+  fornecedor: string | null;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface ReceitaIngrediente {
+  id: UUID;
+  ingrediente_id: UUID;
+  nome: string;
+  unidade: string;
+  quantidade: number;
+  custo_unitario: number;
+}
+
+export interface Receita {
+  id: UUID;
+  empresa_id: UUID | null;
+  produto_id: UUID;
+  produto_nome: string;
+  rendimento: number;
+  custo_total: number;
+  custo_por_unidade: number;
+  ingredientes: ReceitaIngrediente[];
+  ativo: boolean;
+  created_at: string;
+}
+
 export interface Cliente {
   id: UUID;
   nome: string;
