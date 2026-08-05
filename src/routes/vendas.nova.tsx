@@ -57,23 +57,10 @@ const PLATAFORMAS = [
 
 const PAGAMENTOS = ["Pix", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"] as const;
 
-const PRODUTOS = ["Cookie 90g", "Cookie 120g", "Caixa com 4", "Caixa com 8", "Brownie"] as const;
-const SABORES = [
-  "Belga",
-  "Duplo Chocolate",
-  "Red Velvet",
-  "Pistache",
-  "Nutella",
-  "Doce de Leite",
-] as const;
-
-const CLIENTES_INICIAIS = [
-  "Café Aurora",
-  "Mercado Bom Dia",
-  "Padaria Estrela",
-  "Doce Ponto",
-  "Julia Ferraz",
-];
+// Listas alimentadas pelo banco de dados após a integração.
+const PRODUTOS: string[] = [];
+const SABORES: string[] = [];
+const CLIENTES_INICIAIS: string[] = [];
 
 // margem de custo estimada sobre o valor bruto dos produtos
 const CUSTO_ESTIMADO = 0.45;
