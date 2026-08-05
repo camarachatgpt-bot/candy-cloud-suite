@@ -23,7 +23,8 @@ import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
 import type { Ingrediente } from "@/lib/erp/types";
 
-const UNIDADE_OPTIONS = ["kg", "g", "ml", "un"];
+const UNIDADE_OPTIONS = ["kg", "g", "ml", "un"] as const;
+const DEFAULT_UNIDADE = UNIDADE_OPTIONS[0] ?? "kg";
 
 export const Route = createFileRoute("/ingredientes")({
   head: () => ({
@@ -82,7 +83,7 @@ function IngredientesPage() {
   const [categoriaFiltro, setCategoriaFiltro] = useState("todos");
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("");
-  const [unidade, setUnidade] = useState(UNIDADE_OPTIONS[0]);
+  const [unidade, setUnidade] = useState<string>(DEFAULT_UNIDADE);
   const [quantidade, setQuantidade] = useState("");
   const [estoqueMinimo, setEstoqueMinimo] = useState("");
   const [custoUnitario, setCustoUnitario] = useState("");
@@ -125,7 +126,7 @@ function IngredientesPage() {
     setEditingId(null);
     setNome("");
     setCategoria("");
-    setUnidade(UNIDADE_OPTIONS[0]);
+    setUnidade(DEFAULT_UNIDADE);
     setQuantidade("");
     setEstoqueMinimo("");
     setCustoUnitario("");
@@ -141,7 +142,7 @@ function IngredientesPage() {
     setEditingId(item.id);
     setNome(item.nome);
     setCategoria(item.categoria ?? "");
-    setUnidade(item.unidade || UNIDADE_OPTIONS[0]);
+    setUnidade(item.unidade ?? DEFAULT_UNIDADE);
     setQuantidade(String(item.quantidade));
     setEstoqueMinimo(String(item.estoque_minimo));
     setCustoUnitario(String(item.custo_unitario));
@@ -211,7 +212,7 @@ function IngredientesPage() {
       empresa_id: null,
       nome: nome.trim(),
       categoria: categoria.trim() || null,
-      unidade: unidade.trim(),
+      unidade: unidade.trim() || UNIDADE_OPTIONS[0],
       quantidade: Number(quantidade),
       estoque_minimo: Number(estoqueMinimo),
       custo_unitario: Number(custoUnitario),
@@ -332,7 +333,7 @@ function IngredientesPage() {
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Unidade de medida</label>
-          <Select value={unidade} onValueChange={setUnidade}>
+          <Select value={unidade} onValueChange={(value) => setUnidade(value)}>
             <SelectTrigger className="rounded-xl">
               <SelectValue placeholder="Selecione a unidade" />
             </SelectTrigger>

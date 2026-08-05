@@ -153,6 +153,7 @@ function ReceitasPage() {
     mutationFn: (payload: {
       empresa_id: string | null;
       produto_id: string;
+      rendimento: number;
       itens: Array<{ ingrediente_id: string; quantidade: number }>;
     }) => erpRepository.createReceita(payload),
     onSuccess: async () => {
@@ -172,6 +173,7 @@ function ReceitasPage() {
       id: string;
       empresa_id: string | null;
       produto_id: string;
+      rendimento: number;
       itens: Array<{ ingrediente_id: string; quantidade: number }>;
     }) => erpRepository.updateReceita(payload.id, payload),
     onSuccess: async () => {

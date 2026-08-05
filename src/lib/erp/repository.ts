@@ -13,8 +13,12 @@
  */
 
 import type {
+  CategoriaFinanceira,
   Cliente,
   Compra,
+  ContaPagar,
+  ContaReceber,
+  DashboardFinanceiro,
   DashboardTopProduto,
   Fornecedor,
   Ingrediente,
@@ -156,10 +160,9 @@ async function registrarMovimentacaoEstoque(input: {
 
 async function recalcularReceitasPorIngrediente(ingredienteId: string): Promise<void> {
   const { data: receitasRelacionadas, error: receitasRelacionadasError } = await supabase
-    .from("receitas")
-    .select("id, produto_id")
-    .eq("ingrediente_id", ingredienteId);
-
+      .from("receitas")
+      .select("id, produto_id")
+      .eq("ingrediente_id", ingredienteId);
   if (receitasRelacionadasError) throw receitasRelacionadasError;
 
   const produtoIds = [...new Set((receitasRelacionadas ?? []).map((item) => item.produto_id as string).filter(Boolean))];
@@ -199,11 +202,11 @@ async function recalcularReceitasPorIngrediente(ingredienteId: string): Promise<
     );
 
     for (const [produtoId, linhas] of receitasAgrupadas.entries()) {
-      const rendimento = Number(linhas[0]?.rendimento ?? 0);
+      const rendimento = Number((linhas[0] as Record<string, unknown>)?.["rendimento"] ?? 0);
       const custoTotal = linhas.reduce((total, linha) => {
-        const ingredienteId = linha.ingrediente_id as string;
+        const ingredienteId = (linha as Record<string, unknown>)["ingrediente_id"] as string;
         const custoUnitario = custosPorIngrediente.get(ingredienteId) ?? 0;
-        return total + custoUnitario * Number(linha.quantidade ?? 0);
+        return total + custoUnitario * Number((linha as Record<string, unknown>)["quantidade"] ?? 0);
       }, 0);
       const custoPorUnidade = rendimento > 0 ? custoTotal / rendimento : custoTotal;
 
@@ -215,7 +218,7 @@ async function recalcularReceitasPorIngrediente(ingredienteId: string): Promise<
               custo_total: custoTotal,
               custo_por_unidade: custoPorUnidade,
             })
-            .eq("id", linha.id),
+            .eq("id", (linha as Record<string, unknown>)["id"] as string),
         ),
       );
 
@@ -338,6 +341,62 @@ async function aplicarBaixaEstoqueVenda(
   }
 }
 
+async function criarContaReceberParaVenda(venda: Pick<Venda, "id" | "numero" | "total" | "data_venda">): Promise<void> {
+  const { data: categorias, error: categoriasError } = await supabase
+    .from("categorias_financeiras")
+    .select("id, nome")
+    .eq("tipo", "receita")
+    .order("nome")
+    .limit(1)
+    .maybeSingle();
+
+  if (categoriasError) throw categoriasError;
+
+  const { error } = await supabase.from("contas_receber").insert([
+    {
+      empresa_id: null,
+      categoria_id: categorias?.id ?? null,
+      documento: venda.numero,
+      origem: "Venda",
+      descricao: `Recebimento de venda ${venda.numero}`,
+      valor: Number(venda.total ?? 0),
+      data: venda.data_venda,
+      status: "aberto",
+      observacao: "Conta criada automaticamente após a venda.",
+    },
+  ]);
+
+  if (error) throw error;
+}
+
+async function criarContaPagarParaCompra(compra: Pick<Compra, "id" | "fornecedor_nome" | "total" | "data_compra">): Promise<void> {
+  const { data: categorias, error: categoriasError } = await supabase
+    .from("categorias_financeiras")
+    .select("id, nome")
+    .eq("tipo", "despesa")
+    .order("nome")
+    .limit(1)
+    .maybeSingle();
+
+  if (categoriasError) throw categoriasError;
+
+  const { error } = await supabase.from("contas_pagar").insert([
+    {
+      empresa_id: null,
+      categoria_id: categorias?.id ?? null,
+      documento: compra.id,
+      origem: compra.fornecedor_nome ?? "Fornecedor",
+      descricao: `Pagamento de compra ${compra.id}`,
+      valor: Number(compra.total ?? 0),
+      data: compra.data_compra,
+      status: "aberto",
+      observacao: "Conta criada automaticamente após a compra.",
+    },
+  ]);
+
+  if (error) throw error;
+}
+
 export const erpRepository = {
   produtos: async (): Promise<Produto[]> => {
     const { data, error } = await supabase.from("produtos").select("*").order("nome");
@@ -424,10 +483,10 @@ export const erpRepository = {
       const receitaIngrediente = {
         id: item.id as string,
         ingrediente_id: item.ingrediente_id as string,
-        nome: (ingrediente?.nome as string) ?? "Ingrediente",
-        unidade: (ingrediente?.unidade as string) ?? "un",
+        nome: (ingrediente?.["nome"] as string) ?? "Ingrediente",
+        unidade: (ingrediente?.["unidade"] as string) ?? "un",
         quantidade: Number(item.quantidade ?? 0),
-        custo_unitario: Number(ingrediente?.custo_unitario ?? 0),
+        custo_unitario: Number(ingrediente?.["custo_unitario"] ?? 0),
       };
 
       if (existing) {
@@ -523,14 +582,14 @@ export const erpRepository = {
     if (updateError) throw updateError;
 
     const ingredientes = (ingredientesResult.data ?? []).map((item) => ({
-      id: item.id,
-      ingrediente_id: item.id,
-      nome: item.nome,
-      unidade: item.unidade,
+      id: item.id as string,
+      ingrediente_id: item.id as string,
+      nome: item.nome as string,
+      unidade: item.unidade as string,
       quantidade: Number(
-        input.itens.find((recipeItem) => recipeItem.ingrediente_id === item.id)?.quantidade ?? 0,
+        input.itens.find((recipeItem) => recipeItem.ingrediente_id === (item.id as string))?.quantidade ?? 0,
       ),
-      custo_unitario: Number(item.custo_unitario ?? 0),
+      custo_unitario: Number((item as Record<string, unknown>)["custo_unitario"] ?? 0),
     }));
 
     return {
@@ -912,15 +971,15 @@ export const erpRepository = {
       total: Number(item.total ?? 0),
       created_at: item.created_at,
       itens: (item.itens_compra ?? []).map((linha: Record<string, unknown>) => ({
-        id: linha.id as string,
-        compra_id: linha.compra_id as string,
-        ingrediente_id: linha.ingrediente_id as string,
-        ingrediente_nome: (linha.ingrediente_nome as string | null) ?? null,
-        quantidade: Number(linha.quantidade ?? 0),
-        unidade: (linha.unidade as string) ?? "un",
-        valor_unitario: Number(linha.valor_unitario ?? 0),
-        valor_total: Number(linha.valor_total ?? 0),
-        created_at: linha.created_at as string,
+        id: linha["id"] as string,
+        compra_id: linha["compra_id"] as string,
+        ingrediente_id: linha["ingrediente_id"] as string,
+        ingrediente_nome: (linha["ingrediente_nome"] as string | null) ?? null,
+        quantidade: Number(linha["quantidade"] ?? 0),
+        unidade: (linha["unidade"] as string) ?? "un",
+        valor_unitario: Number(linha["valor_unitario"] ?? 0),
+        valor_total: Number(linha["valor_total"] ?? 0),
+        created_at: linha["created_at"] as string,
       })),
     }));
   },
@@ -1179,6 +1238,12 @@ export const erpRepository = {
 
     await persistItensVenda(itensParaInserir);
     await aplicarBaixaEstoqueVenda(vendaId, reducoesPorIngrediente);
+    await criarContaReceberParaVenda({
+      id: vendaId,
+      numero: input.numero,
+      total: input.total,
+      data_venda: input.data_venda,
+    });
 
     return {
       id: vendaCriada.id,
@@ -1197,8 +1262,86 @@ export const erpRepository = {
     };
   },
 
+  categoriasFinanceiras: async (): Promise<CategoriaFinanceira[]> => {
+    const { data, error } = await supabase.from("categorias_financeiras").select("*").order("nome");
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      tipo: item.tipo,
+      cor: item.cor ?? null,
+      ativo: item.ativo,
+      created_at: item.created_at,
+    }));
+  },
+
+  contasReceber: async (): Promise<ContaReceber[]> => {
+    const { data, error } = await supabase.from("contas_receber").select("*").order("data", { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      empresa_id: item.empresa_id ?? null,
+      categoria_id: item.categoria_id ?? null,
+      categoria: item.categoria ?? null,
+      documento: item.documento ?? null,
+      origem: item.origem ?? "—",
+      descricao: item.descricao ?? "",
+      valor: Number(item.valor ?? 0),
+      data: item.data,
+      status: item.status,
+      observacao: item.observacao ?? null,
+      created_at: item.created_at,
+    }));
+  },
+
+  contasPagar: async (): Promise<ContaPagar[]> => {
+    const { data, error } = await supabase.from("contas_pagar").select("*").order("data", { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      empresa_id: item.empresa_id ?? null,
+      categoria_id: item.categoria_id ?? null,
+      categoria: item.categoria ?? null,
+      documento: item.documento ?? null,
+      origem: item.origem ?? "—",
+      descricao: item.descricao ?? "",
+      valor: Number(item.valor ?? 0),
+      data: item.data,
+      status: item.status,
+      observacao: item.observacao ?? null,
+      created_at: item.created_at,
+    }));
+  },
+
   lancamentos: () => empty<Lancamento>(),
   metas: () => empty<Meta>(),
+
+  async dashboardFinanceiro(): Promise<DashboardFinanceiro> {
+    const hoje = new Date();
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString();
+    const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1).toISOString();
+
+    const [{ data: contasReceberMes }, { data: contasPagarMes }] = await Promise.all([
+      supabase.from("contas_receber").select("valor").gte("data", inicioMes).lt("data", fimMes),
+      supabase.from("contas_pagar").select("valor").gte("data", inicioMes).lt("data", fimMes),
+    ]);
+
+    const receitasDoMes = (contasReceberMes ?? []).reduce((total, item) => total + Number(item.valor ?? 0), 0);
+    const despesasDoMes = (contasPagarMes ?? []).reduce((total, item) => total + Number(item.valor ?? 0), 0);
+
+    return {
+      receitas_do_mes: receitasDoMes,
+      despesas_do_mes: despesasDoMes,
+      saldo: receitasDoMes - despesasDoMes,
+      lucro_liquido: receitasDoMes - despesasDoMes,
+    };
+  },
 
   async dashboardTopProdutos(): Promise<DashboardTopProduto[]> {
     const { data, error } = await supabase.from("itens_venda").select("*");

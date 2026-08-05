@@ -92,6 +92,45 @@ export interface Fornecedor {
   created_at: string;
 }
 
+export interface CategoriaFinanceira {
+  id: UUID;
+  nome: string;
+  tipo: "receita" | "despesa";
+  cor: string | null;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface ContaReceber {
+  id: UUID;
+  empresa_id: UUID | null;
+  categoria_id: UUID | null;
+  categoria: string | null;
+  documento: string | null;
+  origem: string;
+  descricao: string;
+  valor: number;
+  data: string;
+  status: "aberto" | "pago" | "atrasado" | "cancelado";
+  observacao: string | null;
+  created_at: string;
+}
+
+export interface ContaPagar {
+  id: UUID;
+  empresa_id: UUID | null;
+  categoria_id: UUID | null;
+  categoria: string | null;
+  documento: string | null;
+  origem: string;
+  descricao: string;
+  valor: number;
+  data: string;
+  status: "aberto" | "pago" | "atrasado" | "cancelado";
+  observacao: string | null;
+  created_at: string;
+}
+
 export interface ItemCompra {
   id: UUID;
   compra_id: UUID;
@@ -174,6 +213,13 @@ export interface Meta {
   periodo: string;
   alvo: number;
   realizado: number;
+}
+
+export interface DashboardFinanceiro {
+  receitas_do_mes: number;
+  despesas_do_mes: number;
+  saldo: number;
+  lucro_liquido: number;
 }
 
 export interface DashboardTopProduto {

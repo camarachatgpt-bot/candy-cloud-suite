@@ -142,7 +142,7 @@ function EstoquePage() {
       .sort((left, right) => {
         const leftStatus = getStatusValue(left.quantidade, left.minimo);
         const rightStatus = getStatusValue(right.quantidade, right.minimo);
-        const prioridade = { critico: 0, atencao: 1, normal: 2 } as const;
+        const prioridade: Record<StatusFiltro, number> = { todos: 2, critico: 0, atencao: 1, normal: 2 };
 
         return prioridade[leftStatus] - prioridade[rightStatus] || left.insumo.localeCompare(right.insumo);
       });

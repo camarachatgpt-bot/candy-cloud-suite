@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ComprasRouteImport } from './routes/compras'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ContasPagarRouteImport } from './routes/contas-pagar'
+import { Route as ContasReceberRouteImport } from './routes/contas-receber'
 import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as FornecedoresRouteImport } from './routes/fornecedores'
@@ -44,6 +46,16 @@ const ComprasRoute = ComprasRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContasPagarRoute = ContasPagarRouteImport.update({
+  id: '/contas-pagar',
+  path: '/contas-pagar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContasReceberRoute = ContasReceberRouteImport.update({
+  id: '/contas-receber',
+  path: '/contas-receber',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EstoqueRoute = EstoqueRouteImport.update({
@@ -112,6 +124,8 @@ export interface FileRoutesByFullPath {
   '/clientes': typeof ClientesRoute
   '/compras': typeof ComprasRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/contas-pagar': typeof ContasPagarRoute
+  '/contas-receber': typeof ContasReceberRoute
   '/estoque': typeof EstoqueRoute
   '/financeiro': typeof FinanceiroRoute
   '/fornecedores': typeof FornecedoresRoute
@@ -130,6 +144,8 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRoute
   '/compras': typeof ComprasRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/contas-pagar': typeof ContasPagarRoute
+  '/contas-receber': typeof ContasReceberRoute
   '/estoque': typeof EstoqueRoute
   '/financeiro': typeof FinanceiroRoute
   '/fornecedores': typeof FornecedoresRoute
@@ -148,6 +164,8 @@ export interface FileRoutesById {
   '/clientes': typeof ClientesRoute
   '/compras': typeof ComprasRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/contas-pagar': typeof ContasPagarRoute
+  '/contas-receber': typeof ContasReceberRoute
   '/estoque': typeof EstoqueRoute
   '/financeiro': typeof FinanceiroRoute
   '/fornecedores': typeof FornecedoresRoute
@@ -168,6 +186,8 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/compras'
     | '/configuracoes'
+    | '/contas-pagar'
+    | '/contas-receber'
     | '/estoque'
     | '/financeiro'
     | '/fornecedores'
@@ -186,6 +206,8 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/compras'
     | '/configuracoes'
+    | '/contas-pagar'
+    | '/contas-receber'
     | '/estoque'
     | '/financeiro'
     | '/fornecedores'
@@ -203,6 +225,8 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/compras'
     | '/configuracoes'
+    | '/contas-pagar'
+    | '/contas-receber'
     | '/estoque'
     | '/financeiro'
     | '/fornecedores'
@@ -222,6 +246,8 @@ export interface RootRouteChildren {
   ClientesRoute: typeof ClientesRoute
   ComprasRoute: typeof ComprasRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  ContasPagarRoute: typeof ContasPagarRoute
+  ContasReceberRoute: typeof ContasReceberRoute
   EstoqueRoute: typeof EstoqueRoute
   FinanceiroRoute: typeof FinanceiroRoute
   FornecedoresRoute: typeof FornecedoresRoute
@@ -262,6 +288,20 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contas-pagar': {
+      id: '/contas-pagar'
+      path: '/contas-pagar'
+      fullPath: '/contas-pagar'
+      preLoaderRoute: typeof ContasPagarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contas-receber': {
+      id: '/contas-receber'
+      path: '/contas-receber'
+      fullPath: '/contas-receber'
+      preLoaderRoute: typeof ContasReceberRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/estoque': {
@@ -369,6 +409,8 @@ const rootRouteChildren: RootRouteChildren = {
   ClientesRoute: ClientesRoute,
   ComprasRoute: ComprasRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  ContasPagarRoute: ContasPagarRoute,
+  ContasReceberRoute: ContasReceberRoute,
   EstoqueRoute: EstoqueRoute,
   FinanceiroRoute: FinanceiroRoute,
   FornecedoresRoute: FornecedoresRoute,
