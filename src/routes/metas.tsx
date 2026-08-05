@@ -10,6 +10,7 @@ import { ResourcePage } from "@/components/erp/resource-page";
 import { Progress } from "@/components/ui/progress";
 import { formatCurrency } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Meta } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/metas")({
@@ -25,7 +26,7 @@ export const Route = createFileRoute("/metas")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(erpQueries.metas()),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "metas" }} />,
   component: MetasPage,
 });
 

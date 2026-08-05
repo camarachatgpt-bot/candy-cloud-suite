@@ -44,6 +44,7 @@ const relacionamento = [
 
 const gestao = [
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
+  { title: "Custos Fixos", url: "/custos-fixos", icon: Wallet },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Metas", url: "/metas", icon: Target },
   { title: "Inteligência", url: "/inteligencia", icon: Bot },

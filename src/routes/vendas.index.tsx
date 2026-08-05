@@ -1,6 +1,7 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import type { Column } from "@/components/erp/data-table";
 import { DataTable } from "@/components/erp/data-table";
@@ -10,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
+import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Venda } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/vendas/")({
@@ -25,7 +29,7 @@ export const Route = createFileRoute("/vendas/")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(erpQueries.vendas()),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "vendas" }} />,
   component: VendasPage,
 });
 
@@ -48,6 +52,39 @@ const columns: Column<Venda>[] = [
 
 function VendasPage() {
   const { data: vendas } = useSuspenseQuery(erpQueries.vendas());
+  const queryClient = useQueryClient();
+
+  const deleteVendaMutation = useMutation({
+    mutationFn: (id: string) => erpRepository.deleteVenda(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["vendas"] });
+      await queryClient.invalidateQueries({ queryKey: ["contas-receber"] });
+      await queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["custos-fixos", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
+      toast.success("Venda removida com sucesso.");
+    },
+    onError: (error: Error) => {
+      handleErpError(error, {
+        action: "excluir",
+        context: { module: "vendas" },
+        fallback: "Não foi possível remover a venda.",
+      });
+    },
+  });
+
+  const handleDelete = (venda: Venda) => {
+    const confirmed = window.confirm(`Deseja realmente excluir a venda ${venda.numero}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteVendaMutation.mutate(venda.id);
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -67,7 +104,25 @@ function VendasPage() {
       <Card className="rounded-2xl border-border/70">
         <CardContent className="p-0">
           <DataTable
-            columns={columns}
+            columns={[
+              ...columns,
+              {
+                key: "actions",
+                header: "Ações",
+                cell: (venda: Venda) => (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-xl px-2 text-destructive"
+                    onClick={() => handleDelete(venda)}
+                    disabled={deleteVendaMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ),
+              },
+            ]}
             rows={vendas}
             getRowId={(v) => v.id}
             emptyDescription="Nenhuma venda registrada. As vendas aparecerão aqui."

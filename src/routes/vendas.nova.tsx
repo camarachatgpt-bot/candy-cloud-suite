@@ -28,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
 import type { Cliente, Produto } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/vendas/nova")({
@@ -233,13 +234,25 @@ function RegistrarVenda() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["vendas"] });
+      await queryClient.invalidateQueries({ queryKey: ["contas-receber"] });
+      await queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["receitas"] });
+      await queryClient.invalidateQueries({ queryKey: ["produtos"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro", "dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["custos-fixos", "dashboard"] });
       toast.success("Venda registrada com sucesso.");
       resetarFormulario();
       navigate({ to: "/vendas" });
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível registrar a venda.");
+      handleErpError(error, {
+        action: "registrar",
+        context: { module: "vendas" },
+        fallback: "Não foi possível registrar a venda.",
+      });
     },
   });
 
@@ -258,7 +271,11 @@ function RegistrarVenda() {
       toast.success("Cliente cadastrado com sucesso.");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível cadastrar o cliente.");
+      handleErpError(error, {
+        action: "cadastrar",
+        context: { module: "clientes" },
+        fallback: "Não foi possível cadastrar o cliente.",
+      });
     },
   });
 

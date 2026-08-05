@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Fornecedor } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/fornecedores")({
@@ -27,7 +29,7 @@ export const Route = createFileRoute("/fornecedores")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(erpQueries.fornecedores()),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "fornecedores" }} />,
   component: FornecedoresPage,
 });
 
@@ -77,7 +79,11 @@ function FornecedoresPage() {
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível salvar o fornecedor.");
+      handleErpError(error, {
+        action: "salvar",
+        context: { module: "fornecedores" },
+        fallback: "Não foi possível salvar o fornecedor.",
+      });
     },
   });
 
@@ -91,7 +97,11 @@ function FornecedoresPage() {
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível atualizar o fornecedor.");
+      handleErpError(error, {
+        action: "atualizar",
+        context: { module: "fornecedores" },
+        fallback: "Não foi possível atualizar o fornecedor.",
+      });
     },
   });
 
@@ -99,12 +109,27 @@ function FornecedoresPage() {
     mutationFn: (id: string) => erpRepository.deleteFornecedor(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["fornecedores"] });
+      await queryClient.invalidateQueries({ queryKey: ["compras"] });
       toast.success("Fornecedor removido com sucesso.");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível remover o fornecedor.");
+      handleErpError(error, {
+        action: "excluir",
+        context: { module: "fornecedores" },
+        fallback: "Não foi possível remover o fornecedor.",
+      });
     },
   });
+
+  const handleDelete = (fornecedor: Fornecedor) => {
+    const confirmed = window.confirm(`Deseja realmente excluir o fornecedor ${fornecedor.nome}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteFornecedorMutation.mutate(fornecedor.id);
+  };
 
   const handleSubmit = () => {
     const payload = {
@@ -146,7 +171,7 @@ function FornecedoresPage() {
                   variant="ghost"
                   size="sm"
                   className="rounded-xl px-2 text-destructive"
-                  onClick={() => deleteFornecedorMutation.mutate(fornecedor.id)}
+                  onClick={() => handleDelete(fornecedor)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

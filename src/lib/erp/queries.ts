@@ -19,6 +19,9 @@ export const erpQueries = {
   vendas: () => queryOptions({ queryKey: ["vendas"], queryFn: erpRepository.vendas }),
   categoriasFinanceiras: () =>
     queryOptions({ queryKey: ["categorias-financeiras"], queryFn: erpRepository.categoriasFinanceiras }),
+  custosFixos: () => queryOptions({ queryKey: ["custos-fixos"], queryFn: erpRepository.custosFixos }),
+  parametrosFinanceiros: () =>
+    queryOptions({ queryKey: ["parametros-financeiros"], queryFn: erpRepository.parametrosFinanceiros }),
   contasReceber: () =>
     queryOptions({ queryKey: ["contas-receber"], queryFn: erpRepository.contasReceber }),
   contasPagar: () =>
@@ -27,6 +30,11 @@ export const erpQueries = {
     queryOptions({ queryKey: ["lancamentos"], queryFn: erpRepository.lancamentos }),
   dashboardFinanceiro: () =>
     queryOptions({ queryKey: ["financeiro", "dashboard"], queryFn: erpRepository.dashboardFinanceiro }),
+  dashboardAlertas: () =>
+    queryOptions({ queryKey: ["dashboard", "alertas"], queryFn: erpRepository.dashboardAlertas }),
+  dashboardCustosFixos: () =>
+    queryOptions({ queryKey: ["custos-fixos", "dashboard"], queryFn: erpRepository.dashboardCustosFixos }),
+  notificacoes: () => queryOptions({ queryKey: ["notificacoes"], queryFn: erpRepository.notificacoes }),
   metas: () => queryOptions({ queryKey: ["metas"], queryFn: erpRepository.metas }),
   resumoDashboard: () =>
     queryOptions({ queryKey: ["dashboard", "resumo"], queryFn: erpRepository.resumoDashboard }),

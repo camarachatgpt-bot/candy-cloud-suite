@@ -21,6 +21,8 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Ingrediente } from "@/lib/erp/types";
 
 const UNIDADE_OPTIONS = ["kg", "g", "ml", "un"] as const;
@@ -39,7 +41,7 @@ export const Route = createFileRoute("/ingredientes")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(erpQueries.ingredientes()),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "ingredientes" }} />,
   component: IngredientesPage,
 });
 
@@ -164,12 +166,20 @@ function IngredientesPage() {
     }) => erpRepository.createIngrediente(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["movimentacoes-estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
       toast.success("Ingrediente cadastrado com sucesso.");
       setOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível salvar o ingrediente.");
+      handleErpError(error, {
+        action: "salvar",
+        context: { module: "ingredientes" },
+        fallback: "Não foi possível salvar o ingrediente.",
+      });
     },
   });
 
@@ -187,12 +197,20 @@ function IngredientesPage() {
     }) => erpRepository.updateIngrediente(payload.id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["movimentacoes-estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
       toast.success("Ingrediente atualizado com sucesso.");
       setOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível atualizar o ingrediente.");
+      handleErpError(error, {
+        action: "atualizar",
+        context: { module: "ingredientes" },
+        fallback: "Não foi possível atualizar o ingrediente.",
+      });
     },
   });
 
@@ -200,12 +218,30 @@ function IngredientesPage() {
     mutationFn: (id: string) => erpRepository.deleteIngrediente(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["movimentacoes-estoque"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
       toast.success("Ingrediente removido com sucesso.");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível remover o ingrediente.");
+      handleErpError(error, {
+        action: "excluir",
+        context: { module: "ingredientes" },
+        fallback: "Não foi possível remover o ingrediente.",
+      });
     },
   });
+
+  const handleDeleteIngrediente = (item: Ingrediente) => {
+    const confirmed = window.confirm(`Deseja realmente excluir o ingrediente ${item.nome}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteIngredienteMutation.mutate(item.id);
+  };
 
   const handleSubmit = () => {
     const payload = {
@@ -268,7 +304,8 @@ function IngredientesPage() {
                   variant="ghost"
                   size="sm"
                   className="rounded-xl px-2 text-destructive"
-                  onClick={() => deleteIngredienteMutation.mutate(item.id)}
+                  onClick={() => handleDeleteIngrediente(item)}
+                  disabled={deleteIngredienteMutation.isPending}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

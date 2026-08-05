@@ -20,6 +20,8 @@ import {
 import { formatCurrency } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Ingrediente, Produto, Receita } from "@/lib/erp/types";
 
 interface ReceitaItemForm {
@@ -52,7 +54,7 @@ export const Route = createFileRoute("/receitas")({
       context.queryClient.ensureQueryData(erpQueries.produtos()),
       context.queryClient.ensureQueryData(erpQueries.ingredientes()),
     ]),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "receitas" }} />,
   component: ReceitasPage,
 });
 
@@ -164,7 +166,11 @@ function ReceitasPage() {
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível salvar a receita.");
+      handleErpError(error, {
+        action: "salvar",
+        context: { module: "receitas" },
+        fallback: "Não foi possível salvar a receita.",
+      });
     },
   });
 
@@ -184,7 +190,11 @@ function ReceitasPage() {
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível atualizar a receita.");
+      handleErpError(error, {
+        action: "atualizar",
+        context: { module: "receitas" },
+        fallback: "Não foi possível atualizar a receita.",
+      });
     },
   });
 
@@ -196,9 +206,23 @@ function ReceitasPage() {
       toast.success("Receita removida com sucesso.");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível remover a receita.");
+      handleErpError(error, {
+        action: "excluir",
+        context: { module: "receitas" },
+        fallback: "Não foi possível remover a receita.",
+      });
     },
   });
+
+  const handleDeleteReceita = (item: Receita) => {
+    const confirmed = window.confirm(`Deseja realmente excluir a receita de ${item.produto_nome}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteReceitaMutation.mutate(item.id);
+  };
 
   const ingredienteOptions = useMemo(
     () => ingredientes.sort((left, right) => left.nome.localeCompare(right.nome)),
@@ -306,7 +330,8 @@ function ReceitasPage() {
                   variant="ghost"
                   size="sm"
                   className="rounded-xl px-2 text-destructive"
-                  onClick={() => deleteReceitaMutation.mutate(item.id)}
+                  onClick={() => handleDeleteReceita(item)}
+                  disabled={deleteReceitaMutation.isPending}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

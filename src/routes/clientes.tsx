@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -7,9 +8,12 @@ import type { Column } from "@/components/erp/data-table";
 import { FormField } from "@/components/erp/form-field";
 import { FormModal } from "@/components/erp/form-modal";
 import { ResourcePage } from "@/components/erp/resource-page";
+import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Cliente } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/clientes")({
@@ -22,7 +26,7 @@ export const Route = createFileRoute("/clientes")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(erpQueries.clientes()),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "clientes" }} />,
   component: ClientesPage,
 });
 
@@ -60,9 +64,38 @@ function ClientesPage() {
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível cadastrar o cliente.");
+      handleErpError(error, {
+        action: "cadastrar",
+        context: { module: "clientes" },
+        fallback: "Não foi possível cadastrar o cliente.",
+      });
     },
   });
+
+  const deleteClienteMutation = useMutation({
+    mutationFn: (id: string) => erpRepository.deleteCliente(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      toast.success("Cliente removido com sucesso.");
+    },
+    onError: (error: Error) => {
+      handleErpError(error, {
+        action: "excluir",
+        context: { module: "clientes" },
+        fallback: "Não foi possível remover o cliente.",
+      });
+    },
+  });
+
+  const handleDelete = (cliente: Cliente) => {
+    const confirmed = window.confirm(`Deseja realmente excluir o cliente ${cliente.nome}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteClienteMutation.mutate(cliente.id);
+  };
 
   const handleSubmit = () => {
     const payload = {
@@ -85,7 +118,25 @@ function ClientesPage() {
       <ResourcePage
         title="Clientes"
         description="Base de clientes, contatos e histórico de compras."
-        columns={columns}
+        columns={[
+          ...columns,
+          {
+            key: "actions",
+            header: "Ações",
+            cell: (cliente: Cliente) => (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-xl px-2 text-destructive"
+                onClick={() => handleDelete(cliente)}
+                disabled={deleteClienteMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            ),
+          },
+        ]}
         rows={clientes}
         getRowId={(c) => c.id}
         actionLabel="Novo cliente"

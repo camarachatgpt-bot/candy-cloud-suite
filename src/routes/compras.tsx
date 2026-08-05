@@ -20,6 +20,8 @@ import {
 import { formatCurrency, formatDate, formatNumber } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
 import { erpRepository } from "@/lib/erp/repository";
+import { handleErpError } from "@/lib/erp/error-handler";
+import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Compra, Fornecedor, Ingrediente, ItemCompra } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/compras")({
@@ -35,7 +37,7 @@ export const Route = createFileRoute("/compras")({
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(erpQueries.compras()),
-  errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
+  errorComponent: ({ error }) => <ErpRouteError error={error} context={{ module: "compras" }} />,
   component: ComprasPage,
 });
 
@@ -57,6 +59,7 @@ function ComprasPage() {
   const [dataCompra, setDataCompra] = useState(new Date().toISOString().slice(0, 10));
   const [observacao, setObservacao] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
+  const [parcelamento, setParcelamento] = useState({ parcelas: "1", intervaloDias: "30" });
   const [itens, setItens] = useState<Array<{
     ingrediente_id: string;
     ingrediente_nome: string | null;
@@ -73,6 +76,7 @@ function ComprasPage() {
     setDataCompra(new Date().toISOString().slice(0, 10));
     setObservacao("");
     setFornecedorId("");
+    setParcelamento({ parcelas: "1", intervaloDias: "30" });
     setItens([
       { ingrediente_id: "", ingrediente_nome: "", quantidade: "", unidade: "un", valor_unitario: "", valor_total: "" },
     ]);
@@ -120,12 +124,21 @@ function ComprasPage() {
       await queryClient.invalidateQueries({ queryKey: ["compras"] });
       await queryClient.invalidateQueries({ queryKey: ["estoque"] });
       await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["contas-pagar"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["custos-fixos", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
       toast.success("Compra cadastrada com sucesso.");
       setOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível salvar a compra.");
+      handleErpError(error, {
+        action: "salvar",
+        context: { module: "compras" },
+        fallback: "Não foi possível salvar a compra.",
+      });
     },
   });
 
@@ -151,12 +164,21 @@ function ComprasPage() {
       await queryClient.invalidateQueries({ queryKey: ["compras"] });
       await queryClient.invalidateQueries({ queryKey: ["estoque"] });
       await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["contas-pagar"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["custos-fixos", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
       toast.success("Compra atualizada com sucesso.");
       setOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível atualizar a compra.");
+      handleErpError(error, {
+        action: "atualizar",
+        context: { module: "compras" },
+        fallback: "Não foi possível atualizar a compra.",
+      });
     },
   });
 
@@ -166,12 +188,31 @@ function ComprasPage() {
       await queryClient.invalidateQueries({ queryKey: ["compras"] });
       await queryClient.invalidateQueries({ queryKey: ["estoque"] });
       await queryClient.invalidateQueries({ queryKey: ["ingredientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["contas-pagar"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["custos-fixos", "dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "alertas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
       toast.success("Compra removida com sucesso.");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Não foi possível remover a compra.");
+      handleErpError(error, {
+        action: "excluir",
+        context: { module: "compras" },
+        fallback: "Não foi possível remover a compra.",
+      });
     },
   });
+
+  const handleDeleteCompra = (compra: Compra) => {
+    const confirmed = window.confirm(`Deseja realmente excluir a compra ${compra.id}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteCompraMutation.mutate(compra.id);
+  };
 
   const totalCompra = useMemo(() => {
     return itens.reduce((total, item) => {
@@ -206,6 +247,10 @@ function ComprasPage() {
       data_compra: dataCompra,
       observacao: observacao.trim() || null,
       total: totalCompra,
+      parcelamento: Number(parcelamento.parcelas) > 1 ? {
+        parcelas: Number(parcelamento.parcelas),
+        intervaloDias: Number(parcelamento.intervaloDias),
+      } : null,
       itens: payloadItens,
     };
 
@@ -248,7 +293,7 @@ function ComprasPage() {
                 }}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="rounded-xl px-2 text-destructive" onClick={() => deleteCompraMutation.mutate(compra.id)}>
+                <Button type="button" variant="ghost" size="sm" className="rounded-xl px-2 text-destructive" onClick={() => handleDeleteCompra(compra)} disabled={deleteCompraMutation.isPending}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -297,6 +342,38 @@ function ComprasPage() {
 
         <FormField id="data-compra" label="Data da compra" type="date" value={dataCompra} onChange={setDataCompra} />
         <FormField id="observacao" label="Observação" value={observacao} onChange={setObservacao} textarea placeholder="Detalhes da compra" />
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Parcelas</label>
+            <Select value={parcelamento.parcelas} onValueChange={(value) => setParcelamento((current) => ({ ...current, parcelas: value }))}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Parcelas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 parcela</SelectItem>
+                <SelectItem value="2">2 parcelas</SelectItem>
+                <SelectItem value="3">3 parcelas</SelectItem>
+                <SelectItem value="4">4 parcelas</SelectItem>
+                <SelectItem value="6">6 parcelas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Intervalo (dias)</label>
+            <Select value={parcelamento.intervaloDias} onValueChange={(value) => setParcelamento((current) => ({ ...current, intervaloDias: value }))}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Intervalo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 dias</SelectItem>
+                <SelectItem value="15">15 dias</SelectItem>
+                <SelectItem value="30">30 dias</SelectItem>
+                <SelectItem value="45">45 dias</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
