@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatCurrency, formatNumber } from "@/lib/erp/format";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
 
 export const Route = createFileRoute("/")({
@@ -28,6 +28,9 @@ export const Route = createFileRoute("/")({
   }),
   loader: ({ context }) => {
     void context.queryClient.ensureQueryData(erpQueries.vendas());
+    void context.queryClient.ensureQueryData(erpQueries.clientes());
+    void context.queryClient.ensureQueryData(erpQueries.produtos());
+    void context.queryClient.ensureQueryData(erpQueries.dashboardTopProdutos());
     return context.queryClient.ensureQueryData(erpQueries.resumoDashboard());
   },
   errorComponent: ({ error }) => <div role="alert">{error.message}</div>,
@@ -38,6 +41,8 @@ function Dashboard() {
   const { data: resumo } = useSuspenseQuery(erpQueries.resumoDashboard());
   const { data: vendas } = useSuspenseQuery(erpQueries.vendas());
   const { data: produtos } = useSuspenseQuery(erpQueries.produtos());
+  const { data: clientes } = useSuspenseQuery(erpQueries.clientes());
+  const { data: topProdutos } = useSuspenseQuery(erpQueries.dashboardTopProdutos());
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -90,7 +95,27 @@ function Dashboard() {
                   </Button>
                 }
               />
-            ) : null}
+            ) : (
+              <div className="space-y-2">
+                {vendas.slice(0, 5).map((venda) => (
+                  <div
+                    key={venda.id}
+                    className="flex items-center justify-between rounded-xl border border-border/60 px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{venda.numero}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(venda.data_venda)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatCurrency(venda.total)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {venda.cliente_nome ?? "Cliente sem nome"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -100,7 +125,21 @@ function Dashboard() {
             <CardDescription>Unidades vendidas no mês</CardDescription>
           </CardHeader>
           <CardContent>
-            {produtos.length === 0 ? <EmptyState icon={Cookie} description="Sem dados de vendas por produto." /> : null}
+            {topProdutos.length === 0 || produtos.length === 0 ? (
+              <EmptyState icon={Cookie} description="Sem dados de vendas por produto." />
+            ) : (
+              <div className="space-y-2">
+                {topProdutos.map((produto) => (
+                  <div
+                    key={produto.nome}
+                    className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2 text-sm"
+                  >
+                    <span>{produto.nome}</span>
+                    <span className="font-medium">{formatNumber(produto.unidades)} un.</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -124,8 +163,15 @@ function Dashboard() {
             <CardDescription>Estoque crítico</CardDescription>
             <CardTitle className="text-2xl">{resumo.estoque_critico} itens</CardTitle>
           </CardHeader>
-          <CardContent className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Package className="h-4 w-4" /> Sem dados
+          <CardContent className="space-y-3 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-2">
+              <span>Clientes cadastrados</span>
+              <span className="font-semibold text-foreground">{formatNumber(clientes.length)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span>Produtos cadastrados</span>
+              <span className="font-semibold text-foreground">{formatNumber(produtos.length)}</span>
+            </div>
           </CardContent>
         </Card>
         <Card

@@ -14,4 +14,9 @@ export const erpQueries = {
   metas: () => queryOptions({ queryKey: ["metas"], queryFn: erpRepository.metas }),
   resumoDashboard: () =>
     queryOptions({ queryKey: ["dashboard", "resumo"], queryFn: erpRepository.resumoDashboard }),
+  dashboardTopProdutos: () =>
+    queryOptions({
+      queryKey: ["dashboard", "top-produtos"],
+      queryFn: erpRepository.dashboardTopProdutos,
+    }),
 };

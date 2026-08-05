@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Plus, Save, Trash2, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { erpQueries } from "@/lib/erp/queries";
+import { erpRepository } from "@/lib/erp/repository";
+import type { Cliente, Produto } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/vendas/nova")({
   head: () => ({
@@ -42,6 +46,11 @@ export const Route = createFileRoute("/vendas/nova")({
       },
     ],
   }),
+  loader: ({ context }) => {
+    void context.queryClient.ensureQueryData(erpQueries.clientes());
+    void context.queryClient.ensureQueryData(erpQueries.produtos());
+    return undefined;
+  },
   component: RegistrarVenda,
 });
 
@@ -55,15 +64,12 @@ const PLATAFORMAS = [
   { value: "site", label: "Site", taxa: 0.03 },
 ] as const;
 
-const PAGAMENTOS = ["Pix", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"] as const;
-
-// Listas alimentadas pelo banco de dados após a integração.
-const PRODUTOS: string[] = [];
-const SABORES: string[] = [];
-const CLIENTES_INICIAIS: string[] = [];
-
-// margem de custo estimada sobre o valor bruto dos produtos
-const CUSTO_ESTIMADO = 0.45;
+const PAGAMENTOS = [
+  { value: "pix", label: "Pix" },
+  { value: "dinheiro", label: "Dinheiro" },
+  { value: "credito", label: "Crédito" },
+  { value: "debito", label: "Débito" },
+] as const;
 
 type Item = {
   id: string;
@@ -88,16 +94,24 @@ const brl = (v: number) =>
 
 function RegistrarVenda() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: clientes } = useSuspenseQuery(erpQueries.clientes());
+  const { data: produtos } = useSuspenseQuery(erpQueries.produtos());
+
   const [data, setData] = useState("");
   const [hora, setHora] = useState("");
   const [cliente, setCliente] = useState("");
-  const [clientes, setClientes] = useState(CLIENTES_INICIAIS);
   const [novoCliente, setNovoCliente] = useState("");
   const [dialogAberto, setDialogAberto] = useState(false);
   const [plataforma, setPlataforma] = useState("balcao");
-  const [pagamento, setPagamento] = useState("Pix");
+  const [pagamento, setPagamento] = useState("pix");
   const [observacoes, setObservacoes] = useState("");
   const [itens, setItens] = useState<Item[]>([novoItem()]);
+
+  const saboresDisponiveis = useMemo(
+    () => Array.from(new Set(produtos.map((produto) => produto.sabor).filter(Boolean))) as string[],
+    [produtos],
+  );
 
   useEffect(() => {
     const agora = new Date();
@@ -107,42 +121,156 @@ function RegistrarVenda() {
   }, []);
 
   const atualizarItem = (id: string, patch: Partial<Item>) =>
-    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+    setItens((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
 
-  const subtotalItem = (i: Item) =>
-    Math.max(i.quantidade * i.precoUnitario - i.desconto, 0);
+        const nextItem = { ...item, ...patch };
+        const produtoSelecionado = produtos.find((produto) => produto.id === nextItem.produto);
+
+        if (produtoSelecionado && patch.produto) {
+          nextItem.precoUnitario = produtoSelecionado.preco_venda;
+          if (!nextItem.sabor && produtoSelecionado.sabor) {
+            nextItem.sabor = produtoSelecionado.sabor;
+          }
+        }
+
+        return nextItem;
+      }),
+    );
+
+  const subtotalItem = (item: Item) =>
+    Math.max(item.quantidade * item.precoUnitario - item.desconto, 0);
 
   const totais = useMemo(() => {
-    const bruto = itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0);
-    const desconto = itens.reduce((s, i) => s + i.desconto, 0);
+    const bruto = itens.reduce((soma, item) => soma + item.quantidade * item.precoUnitario, 0);
+    const desconto = itens.reduce((soma, item) => soma + item.desconto, 0);
     const subtotal = Math.max(bruto - desconto, 0);
-    const taxaPct = PLATAFORMAS.find((p) => p.value === plataforma)?.taxa ?? 0;
+    const taxaPct = PLATAFORMAS.find((plataformaItem) => plataformaItem.value === plataforma)?.taxa ?? 0;
     const taxa = subtotal * taxaPct;
-    const total = subtotal - taxa;
-    const lucro = total - bruto * CUSTO_ESTIMADO;
-    return { bruto, desconto, subtotal, taxa, taxaPct, total, lucro };
-  }, [itens, plataforma]);
+    const total = Math.max(subtotal - taxa, 0);
+    const custoTotal = itens.reduce((soma, item) => {
+      const produtoSelecionado = produtos.find((produto) => produto.id === item.produto);
+      return soma + item.quantidade * (produtoSelecionado?.custo ?? 0);
+    }, 0);
+    const lucro = Math.max(subtotal - custoTotal - taxa, 0);
 
-  const salvar = () => {
-    if (!cliente) {
-      toast.error("Selecione um cliente.");
-      return;
-    }
-    if (!itens.some((i) => i.produto && i.quantidade > 0)) {
-      toast.error("Adicione ao menos um produto.");
-      return;
-    }
-    toast.success("Venda registrada (demonstração)", {
-      description: `${cliente} · ${brl(totais.total)}`,
-    });
+    return { bruto, desconto, subtotal, taxa, taxaPct, total, lucro };
+  }, [itens, plataforma, produtos]);
+
+  const resetarFormulario = () => {
+    setCliente("");
+    setObservacoes("");
+    setPlataforma("balcao");
+    setPagamento("pix");
+    setItens([novoItem()]);
+
+    const agora = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setData(`${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}`);
+    setHora(`${pad(agora.getHours())}:${pad(agora.getMinutes())}`);
   };
 
+  const createVendaMutation = useMutation({
+    mutationFn: async () => {
+      const clienteSelecionado = clientes.find((clienteAtual) => clienteAtual.id === cliente);
+
+      if (!clienteSelecionado) {
+        throw new Error("Selecione um cliente cadastrado.");
+      }
+
+      const itensValidos = itens.filter(
+        (item) => item.produto && item.quantidade > 0 && item.precoUnitario >= 0,
+      );
+
+      if (itensValidos.length === 0) {
+        throw new Error("Adicione ao menos um produto válido.");
+      }
+
+      const itensPayload = itensValidos.map((item) => {
+        const produtoSelecionado = produtos.find((produto) => produto.id === item.produto);
+
+        if (!produtoSelecionado) {
+          throw new Error("Selecione um produto válido para cada item.");
+        }
+
+        return {
+          produto_id: item.produto,
+          produto_nome: produtoSelecionado.nome,
+          sabor: item.sabor || produtoSelecionado.sabor || null,
+          quantidade: item.quantidade,
+          preco_unitario: item.precoUnitario,
+          desconto: item.desconto,
+          subtotal: Math.max(item.quantidade * item.precoUnitario - item.desconto, 0),
+        };
+      });
+
+      const numero = `VN-${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "")}`;
+      const dataVenda = `${data}T${hora || "00:00"}:00`;
+      const itensResumo = itensPayload
+        .map((item) => `${item.produto_nome} x ${item.quantidade}`)
+        .join(" | ");
+
+      const payload = {
+        numero,
+        cliente_id: clienteSelecionado.id,
+        cliente_nome: clienteSelecionado.nome,
+        plataforma,
+        forma_pagamento: pagamento,
+        subtotal: totais.subtotal,
+        desconto: totais.desconto,
+        taxa_plataforma: totais.taxa,
+        total: totais.total,
+        lucro_estimado: totais.lucro,
+        observacoes: [observacoes.trim(), itensResumo].filter(Boolean).join(" | ") || null,
+        data_venda: dataVenda,
+        itens: itensPayload,
+      };
+
+      return erpRepository.createVenda(payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["vendas"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "resumo"] });
+      toast.success("Venda registrada com sucesso.");
+      resetarFormulario();
+      navigate({ to: "/vendas" });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Não foi possível registrar a venda.");
+    },
+  });
+
+  const createClienteMutation = useMutation({
+    mutationFn: (payload: {
+      nome: string;
+      telefone: string | null;
+      email: string | null;
+      cidade: string | null;
+    }) => erpRepository.createCliente(payload),
+    onSuccess: async (clienteCriado) => {
+      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      setCliente(clienteCriado.id);
+      setNovoCliente("");
+      setDialogAberto(false);
+      toast.success("Cliente cadastrado com sucesso.");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Não foi possível cadastrar o cliente.");
+    },
+  });
+
+  const salvar = () => {
+    createVendaMutation.mutate();
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-in fade-in duration-500">
       <PageHeader
         title="Registrar Venda"
-        description="Preencha em segundos. Nenhum dado é salvo ainda — apenas interface."
+        description="Preencha em segundos. Registre pedidos com cliente, plataforma, pagamento e itens."
         actions={
           <Button asChild variant="ghost" size="icon" className="rounded-full">
             <Link to="/vendas" aria-label="Fechar">
@@ -186,9 +314,9 @@ function RegistrarVenda() {
                   <SelectValue placeholder="Selecionar cliente" />
                 </SelectTrigger>
                 <SelectContent>
-                  {clientes.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {clientes.map((clienteAtual: Cliente) => (
+                    <SelectItem key={clienteAtual.id} value={clienteAtual.id}>
+                      {clienteAtual.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -212,10 +340,10 @@ function RegistrarVenda() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PLATAFORMAS.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                    {p.taxa > 0 ? ` · taxa ${Math.round(p.taxa * 100)}%` : ""}
+                {PLATAFORMAS.map((plataformaItem) => (
+                  <SelectItem key={plataformaItem.value} value={plataformaItem.value}>
+                    {plataformaItem.label}
+                    {plataformaItem.taxa > 0 ? ` · taxa ${Math.round(plataformaItem.taxa * 100)}%` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -228,9 +356,9 @@ function RegistrarVenda() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAGAMENTOS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
+                {PAGAMENTOS.map((pagamentoItem) => (
+                  <SelectItem key={pagamentoItem.value} value={pagamentoItem.value}>
+                    {pagamentoItem.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -272,7 +400,7 @@ function RegistrarVenda() {
                   className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
                   aria-label={`Remover item ${index + 1}`}
                   disabled={itens.length === 1}
-                  onClick={() => setItens((prev) => prev.filter((i) => i.id !== item.id))}
+                  onClick={() => setItens((prev) => prev.filter((itemAtual) => itemAtual.id !== item.id))}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -283,15 +411,15 @@ function RegistrarVenda() {
                   <Label>Produto</Label>
                   <Select
                     value={item.produto}
-                    onValueChange={(v) => atualizarItem(item.id, { produto: v })}
+                    onValueChange={(value) => atualizarItem(item.id, { produto: value })}
                   >
                     <SelectTrigger className="w-full rounded-xl bg-background">
                       <SelectValue placeholder="Selecionar" />
                     </SelectTrigger>
                     <SelectContent>
-                      {PRODUTOS.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
+                      {produtos.map((produto: Produto) => (
+                        <SelectItem key={produto.id} value={produto.id}>
+                          {produto.nome}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -301,15 +429,15 @@ function RegistrarVenda() {
                   <Label>Sabor</Label>
                   <Select
                     value={item.sabor}
-                    onValueChange={(v) => atualizarItem(item.id, { sabor: v })}
+                    onValueChange={(value) => atualizarItem(item.id, { sabor: value })}
                   >
                     <SelectTrigger className="w-full rounded-xl bg-background">
                       <SelectValue placeholder="Selecionar" />
                     </SelectTrigger>
                     <SelectContent>
-                      {SABORES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
+                      {saboresDisponiveis.map((sabor) => (
+                        <SelectItem key={sabor} value={sabor}>
+                          {sabor}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -422,7 +550,12 @@ function RegistrarVenda() {
         >
           Cancelar
         </Button>
-        <Button type="button" className="rounded-xl shadow-[var(--shadow-glow)]" onClick={salvar}>
+        <Button
+          type="button"
+          className="rounded-xl shadow-[var(--shadow-glow)]"
+          onClick={salvar}
+          disabled={createVendaMutation.isPending}
+        >
           <Save className="h-4 w-4" />
           Salvar Venda
         </Button>
@@ -432,9 +565,7 @@ function RegistrarVenda() {
         <DialogContent className="rounded-2xl sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Novo cliente</DialogTitle>
-            <DialogDescription>
-              O cliente ficará disponível nesta sessão de demonstração.
-            </DialogDescription>
+            <DialogDescription>Cadastre o cliente e ele será listado no Select após a atualização.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="novo-cliente">Nome</Label>
@@ -456,14 +587,21 @@ function RegistrarVenda() {
             </Button>
             <Button
               className="rounded-xl"
+              disabled={createClienteMutation.isPending}
               onClick={() => {
                 const nome = novoCliente.trim();
-                if (!nome) return;
-                setClientes((prev) => (prev.includes(nome) ? prev : [...prev, nome]));
-                setCliente(nome);
-                setNovoCliente("");
-                setDialogAberto(false);
-                toast.success("Cliente adicionado");
+
+                if (!nome) {
+                  toast.error("Informe o nome do cliente.");
+                  return;
+                }
+
+                createClienteMutation.mutate({
+                  nome,
+                  telefone: null,
+                  email: null,
+                  cidade: null,
+                });
               }}
             >
               Cadastrar

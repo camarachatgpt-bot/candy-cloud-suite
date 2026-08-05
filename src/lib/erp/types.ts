@@ -69,6 +69,19 @@ export interface Venda {
   data_venda: string;
 }
 
+export interface ItemVenda {
+  id: UUID;
+  venda_id: UUID;
+  produto_id: UUID;
+  produto_nome: string;
+  sabor: string | null;
+  quantidade: number;
+  preco_unitario: number;
+  desconto: number;
+  subtotal: number;
+  created_at: string;
+}
+
 export type TipoLancamento = "receita" | "despesa";
 
 export interface Lancamento {
@@ -87,6 +100,11 @@ export interface Meta {
   periodo: string;
   alvo: number;
   realizado: number;
+}
+
+export interface DashboardTopProduto {
+  nome: string;
+  unidades: number;
 }
 
 export interface ResumoDashboard {
