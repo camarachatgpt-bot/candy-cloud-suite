@@ -92,6 +92,30 @@ export interface Fornecedor {
   created_at: string;
 }
 
+export interface ItemCompra {
+  id: UUID;
+  compra_id: UUID;
+  ingrediente_id: UUID;
+  ingrediente_nome: string | null;
+  quantidade: number;
+  unidade: string;
+  valor_unitario: number;
+  valor_total: number;
+  created_at: string;
+}
+
+export interface Compra {
+  id: UUID;
+  empresa_id: UUID | null;
+  fornecedor_id: UUID | null;
+  fornecedor_nome: string | null;
+  data_compra: string;
+  observacao: string | null;
+  total: number;
+  created_at: string;
+  itens?: ItemCompra[];
+}
+
 export type PlataformaVenda =
   | "balcao"
   | "whatsapp"

@@ -15,6 +15,7 @@ export const erpQueries = {
     }),
   fornecedores: () =>
     queryOptions({ queryKey: ["fornecedores"], queryFn: erpRepository.fornecedores }),
+  compras: () => queryOptions({ queryKey: ["compras"], queryFn: erpRepository.compras }),
   vendas: () => queryOptions({ queryKey: ["vendas"], queryFn: erpRepository.vendas }),
   lancamentos: () =>
     queryOptions({ queryKey: ["lancamentos"], queryFn: erpRepository.lancamentos }),

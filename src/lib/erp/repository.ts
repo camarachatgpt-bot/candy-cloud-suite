@@ -14,9 +14,11 @@
 
 import type {
   Cliente,
+  Compra,
   DashboardTopProduto,
   Fornecedor,
   Ingrediente,
+  ItemCompra,
   ItemEstoque,
   ItemVenda,
   Lancamento,
@@ -150,6 +152,81 @@ async function registrarMovimentacaoEstoque(input: {
   ]);
 
   if (error) throw error;
+}
+
+async function recalcularReceitasPorIngrediente(ingredienteId: string): Promise<void> {
+  const { data: receitasRelacionadas, error: receitasRelacionadasError } = await supabase
+    .from("receitas")
+    .select("id, produto_id")
+    .eq("ingrediente_id", ingredienteId);
+
+  if (receitasRelacionadasError) throw receitasRelacionadasError;
+
+  const produtoIds = [...new Set((receitasRelacionadas ?? []).map((item) => item.produto_id as string).filter(Boolean))];
+
+  if (produtoIds.length === 0) {
+    return;
+  }
+
+  const { data: receitasPorProduto, error: receitasPorProdutoError } = await supabase
+    .from("receitas")
+    .select("id, produto_id, ingrediente_id, quantidade, rendimento")
+    .in("produto_id", produtoIds);
+
+  if (receitasPorProdutoError) throw receitasPorProdutoError;
+
+  const receitasAgrupadas = new Map<string, Array<Record<string, unknown>>>();
+
+  for (const receita of receitasPorProduto ?? []) {
+    const produtoId = receita.produto_id as string;
+    const linhas = receitasAgrupadas.get(produtoId) ?? [];
+    linhas.push(receita);
+    receitasAgrupadas.set(produtoId, linhas);
+  }
+
+  const ingredientesIds = [...new Set((receitasPorProduto ?? []).map((item) => item.ingrediente_id as string).filter(Boolean))];
+
+  if (ingredientesIds.length > 0) {
+    const { data: ingredientes, error: ingredientesError } = await supabase
+      .from("ingredientes")
+      .select("id, custo_unitario")
+      .in("id", ingredientesIds);
+
+    if (ingredientesError) throw ingredientesError;
+
+    const custosPorIngrediente = new Map<string, number>(
+      (ingredientes ?? []).map((item) => [item.id as string, Number(item.custo_unitario ?? 0)]),
+    );
+
+    for (const [produtoId, linhas] of receitasAgrupadas.entries()) {
+      const rendimento = Number(linhas[0]?.rendimento ?? 0);
+      const custoTotal = linhas.reduce((total, linha) => {
+        const ingredienteId = linha.ingrediente_id as string;
+        const custoUnitario = custosPorIngrediente.get(ingredienteId) ?? 0;
+        return total + custoUnitario * Number(linha.quantidade ?? 0);
+      }, 0);
+      const custoPorUnidade = rendimento > 0 ? custoTotal / rendimento : custoTotal;
+
+      await Promise.all(
+        linhas.map((linha) =>
+          supabase
+            .from("receitas")
+            .update({
+              custo_total: custoTotal,
+              custo_por_unidade: custoPorUnidade,
+            })
+            .eq("id", linha.id),
+        ),
+      );
+
+      const { error: updateProdutoError } = await supabase
+        .from("produtos")
+        .update({ preco_custo: custoPorUnidade })
+        .eq("id", produtoId);
+
+      if (updateProdutoError) throw updateProdutoError;
+    }
+  }
 }
 
 async function calcularBaixaEstoqueVenda(
@@ -742,7 +819,271 @@ export const erpRepository = {
     };
   },
 
-  fornecedores: () => empty<Fornecedor>(),
+  async createFornecedor(input: {
+    nome: string;
+    contato: string | null;
+    categoria: string | null;
+  }): Promise<Fornecedor> {
+    const { data, error } = await supabase
+      .from("fornecedores")
+      .insert([
+        {
+          nome: input.nome,
+          contato: input.contato,
+          categoria: input.categoria,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      nome: data.nome,
+      contato: data.contato ?? null,
+      categoria: data.categoria ?? null,
+      created_at: data.created_at,
+    };
+  },
+
+  async updateFornecedor(id: string, input: {
+    nome: string;
+    contato: string | null;
+    categoria: string | null;
+  }): Promise<Fornecedor> {
+    const { data, error } = await supabase
+      .from("fornecedores")
+      .update({
+        nome: input.nome,
+        contato: input.contato,
+        categoria: input.categoria,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      nome: data.nome,
+      contato: data.contato ?? null,
+      categoria: data.categoria ?? null,
+      created_at: data.created_at,
+    };
+  },
+
+  async deleteFornecedor(id: string): Promise<void> {
+    const { error } = await supabase.from("fornecedores").delete().eq("id", id);
+
+    if (error) throw error;
+  },
+
+  fornecedores: async (): Promise<Fornecedor[]> => {
+    const { data, error } = await supabase.from("fornecedores").select("*").order("nome");
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      contato: item.contato ?? null,
+      categoria: item.categoria ?? null,
+      created_at: item.created_at,
+    }));
+  },
+
+  compras: async (): Promise<Compra[]> => {
+    const { data, error } = await supabase
+      .from("compras")
+      .select("*, itens_compra(*)")
+      .order("data_compra", { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      empresa_id: item.empresa_id ?? null,
+      fornecedor_id: item.fornecedor_id,
+      fornecedor_nome: item.fornecedor_nome,
+      data_compra: item.data_compra,
+      observacao: item.observacao ?? null,
+      total: Number(item.total ?? 0),
+      created_at: item.created_at,
+      itens: (item.itens_compra ?? []).map((linha: Record<string, unknown>) => ({
+        id: linha.id as string,
+        compra_id: linha.compra_id as string,
+        ingrediente_id: linha.ingrediente_id as string,
+        ingrediente_nome: (linha.ingrediente_nome as string | null) ?? null,
+        quantidade: Number(linha.quantidade ?? 0),
+        unidade: (linha.unidade as string) ?? "un",
+        valor_unitario: Number(linha.valor_unitario ?? 0),
+        valor_total: Number(linha.valor_total ?? 0),
+        created_at: linha.created_at as string,
+      })),
+    }));
+  },
+
+  async createCompra(input: {
+    empresa_id: string | null;
+    fornecedor_id: string | null;
+    fornecedor_nome: string | null;
+    data_compra: string;
+    observacao: string | null;
+    total: number;
+    itens: Array<{
+      ingrediente_id: string;
+      ingrediente_nome: string | null;
+      quantidade: number;
+      unidade: string;
+      valor_unitario: number;
+      valor_total: number;
+    }>;
+  }): Promise<Compra> {
+    const { data: compraData, error: compraError } = await supabase
+      .from("compras")
+      .insert([
+        {
+          empresa_id: input.empresa_id,
+          fornecedor_id: input.fornecedor_id,
+          fornecedor_nome: input.fornecedor_nome,
+          data_compra: input.data_compra,
+          observacao: input.observacao,
+          total: input.total,
+        },
+      ])
+      .select()
+      .single();
+
+    if (compraError) throw compraError;
+
+    const compraId = compraData?.id as string | undefined;
+
+    if (!compraId) {
+      throw new Error("Não foi possível localizar a compra criada.");
+    }
+
+    const itensPayload = input.itens.map((item) => ({
+      compra_id: compraId,
+      ingrediente_id: item.ingrediente_id,
+      ingrediente_nome: item.ingrediente_nome,
+      quantidade: item.quantidade,
+      unidade: item.unidade,
+      valor_unitario: item.valor_unitario,
+      valor_total: item.valor_total,
+    }));
+
+    const { error: itensError } = await supabase.from("itens_compra").insert(itensPayload);
+
+    if (itensError) throw itensError;
+
+    for (const item of input.itens) {
+      const { data: ingredienteAtual, error: ingredienteFetchError } = await supabase
+        .from("ingredientes")
+        .select("quantidade, custo_unitario, nome")
+        .eq("id", item.ingrediente_id)
+        .maybeSingle();
+
+      if (ingredienteFetchError) throw ingredienteFetchError;
+
+      const estoqueAnterior = Number(ingredienteAtual?.quantidade ?? 0);
+      const estoquePosterior = estoqueAnterior + Number(item.quantidade ?? 0);
+      const custoAnterior = Number(ingredienteAtual?.custo_unitario ?? 0);
+      const novoCusto = Number(item.valor_unitario ?? 0);
+      const custoMedio =
+        estoqueAnterior > 0
+          ? (custoAnterior * estoqueAnterior + novoCusto * Number(item.quantidade ?? 0)) / estoquePosterior
+          : novoCusto;
+
+      const { error: estoqueUpdateError } = await supabase
+        .from("ingredientes")
+        .update({
+          quantidade: estoquePosterior,
+          custo_unitario: custoMedio,
+        })
+        .eq("id", item.ingrediente_id);
+
+      if (estoqueUpdateError) throw estoqueUpdateError;
+
+      await recalcularReceitasPorIngrediente(item.ingrediente_id);
+
+      await registrarMovimentacaoEstoque({
+        empresa_id: input.empresa_id,
+        ingrediente_id: item.ingrediente_id,
+        tipo: "entrada",
+        origem: "Compra",
+        documento: `compra-${compraId}`,
+        quantidade: Number(item.quantidade ?? 0),
+        estoque_anterior: estoqueAnterior,
+        estoque_posterior: estoquePosterior,
+        observacao: `Compra registrada para ${ingredienteAtual?.nome ?? "ingrediente"}.`,
+      });
+    }
+
+    return {
+      id: compraData.id,
+      empresa_id: compraData.empresa_id ?? null,
+      fornecedor_id: compraData.fornecedor_id,
+      fornecedor_nome: compraData.fornecedor_nome,
+      data_compra: compraData.data_compra,
+      observacao: compraData.observacao ?? null,
+      total: Number(compraData.total ?? 0),
+      created_at: compraData.created_at,
+      itens: itensPayload.map((item) => ({
+        id: `${compraId}-${item.ingrediente_id}`,
+        compra_id: compraId,
+        ingrediente_id: item.ingrediente_id,
+        ingrediente_nome: item.ingrediente_nome,
+        quantidade: Number(item.quantidade ?? 0),
+        unidade: item.unidade,
+        valor_unitario: Number(item.valor_unitario ?? 0),
+        valor_total: Number(item.valor_total ?? 0),
+        created_at: compraData.created_at,
+      })),
+    };
+  },
+
+  async updateCompra(id: string, input: {
+    empresa_id: string | null;
+    fornecedor_id: string | null;
+    fornecedor_nome: string | null;
+    data_compra: string;
+    observacao: string | null;
+    total: number;
+    itens: Array<{
+      ingrediente_id: string;
+      ingrediente_nome: string | null;
+      quantidade: number;
+      unidade: string;
+      valor_unitario: number;
+      valor_total: number;
+    }>;
+  }): Promise<Compra> {
+    const { error: deleteItemsError } = await supabase.from("itens_compra").delete().eq("compra_id", id);
+
+    if (deleteItemsError) throw deleteItemsError;
+
+    const { error: deleteCompraError } = await supabase.from("compras").delete().eq("id", id);
+
+    if (deleteCompraError) throw deleteCompraError;
+
+    return this.createCompra({
+      empresa_id: input.empresa_id,
+      fornecedor_id: input.fornecedor_id,
+      fornecedor_nome: input.fornecedor_nome,
+      data_compra: input.data_compra,
+      observacao: input.observacao,
+      total: input.total,
+      itens: input.itens,
+    });
+  },
+
+  async deleteCompra(id: string): Promise<void> {
+    const { error } = await supabase.from("compras").delete().eq("id", id);
+
+    if (error) throw error;
+  },
 
   vendas: async (): Promise<Venda[]> => {
     const { data, error } = await supabase.from("vendas").select("*").order("data_venda", {

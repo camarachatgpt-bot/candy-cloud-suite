@@ -33,6 +33,7 @@ const operacao = [
   { title: "Ingredientes", url: "/ingredientes", icon: Package },
   { title: "Receitas", url: "/receitas", icon: Package },
   { title: "Estoque", url: "/estoque", icon: Package },
+  { title: "Compras", url: "/compras", icon: ShoppingCart },
   { title: "Vendas", url: "/vendas", icon: ShoppingCart },
 ] as const;
 
