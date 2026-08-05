@@ -137,13 +137,19 @@ function RegistrarVenda() {
   }, [itens, plataforma]);
 
   const salvar = () => {
-    if (!cliente) return toast.error("Selecione um cliente.");
-    if (!itens.some((i) => i.produto && i.quantidade > 0))
-      return toast.error("Adicione ao menos um produto.");
+    if (!cliente) {
+      toast.error("Selecione um cliente.");
+      return;
+    }
+    if (!itens.some((i) => i.produto && i.quantidade > 0)) {
+      toast.error("Adicione ao menos um produto.");
+      return;
+    }
     toast.success("Venda registrada (demonstração)", {
       description: `${cliente} · ${brl(totais.total)}`,
     });
   };
+
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-in fade-in duration-500">
