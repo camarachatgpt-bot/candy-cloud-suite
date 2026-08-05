@@ -70,9 +70,11 @@ function Dashboard() {
         title="Dashboard"
         description="Resumo fictício de demonstração da operação da confeitaria."
         actions={
-          <Button className="rounded-xl shadow-[var(--shadow-glow)]">
-            Novo pedido
-            <ArrowUpRight className="ml-1 h-4 w-4" />
+          <Button asChild className="rounded-xl shadow-[var(--shadow-glow)]">
+            <Link to="/vendas/nova">
+              Registrar Venda
+              <ArrowUpRight className="ml-1 h-4 w-4" />
+            </Link>
           </Button>
         }
       />
