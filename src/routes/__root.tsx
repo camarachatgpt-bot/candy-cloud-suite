@@ -16,6 +16,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
+
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -163,6 +165,8 @@ function RootComponent() {
           </div>
         </div>
       </SidebarProvider>
+      <Toaster position="top-right" richColors />
+
     </QueryClientProvider>
   );
 }
