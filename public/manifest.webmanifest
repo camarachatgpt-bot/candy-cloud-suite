@@ -1,0 +1,32 @@
+{
+  "name": "Candy ERP",
+  "short_name": "Candy ERP",
+  "description": "Sistema de Gestão da Candy Colors",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "scope": "/",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#ec4899",
+  "background_color": "#ffffff",
+  "id": "/",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
