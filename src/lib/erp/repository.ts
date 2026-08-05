@@ -23,12 +23,65 @@ import type {
   Venda,
 } from "./types";
 
+import { supabase } from "../supabase";
+
 async function empty<T>(): Promise<T[]> {
   return [];
 }
 
 export const erpRepository = {
-  produtos: () => empty<Produto>(),
+  produtos: async (): Promise<Produto[]> => {
+    const { data, error } = await supabase.from("produtos").select("*").order("nome");
+
+    if (error) throw error;
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      sabor: null,
+      sku: item.sku,
+      preco_venda: Number(item.preco_venda ?? 0),
+      custo: Number(item.preco_custo ?? 0),
+      ativo: item.ativo,
+      created_at: item.created_at,
+    }));
+  },
+
+  async createProduto(input: {
+    nome: string;
+    sku: string;
+    preco_custo: number;
+    preco_venda: number;
+    ativo: boolean;
+  }): Promise<Produto> {
+    const { data, error } = await supabase
+      .from("produtos")
+      .insert([
+        {
+          nome: input.nome,
+          sku: input.sku,
+          preco_custo: input.preco_custo,
+          preco_venda: input.preco_venda,
+          ativo: input.ativo,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      nome: data.nome,
+      sabor: null,
+      sku: data.sku,
+      preco_venda: Number(data.preco_venda ?? 0),
+      custo: Number(data.preco_custo ?? 0),
+      ativo: data.ativo,
+      created_at: data.created_at,
+    };
+  },
+
   estoque: () => empty<ItemEstoque>(),
   clientes: () => empty<Cliente>(),
   fornecedores: () => empty<Fornecedor>(),

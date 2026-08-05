@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { ResourcePage } from "@/components/erp/resource-page";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/erp/format";
 import { erpQueries } from "@/lib/erp/queries";
+import { erpRepository } from "@/lib/erp/repository";
 import type { Produto } from "@/lib/erp/types";
 
 export const Route = createFileRoute("/produtos")({
@@ -48,10 +49,55 @@ const columns: Column<Produto>[] = [
 
 function ProdutosPage() {
   const { data: produtos } = useSuspenseQuery(erpQueries.produtos());
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState("");
-  const [sabor, setSabor] = useState("");
-  const [preco, setPreco] = useState("");
+  const [sku, setSku] = useState("");
+  const [precoCusto, setPrecoCusto] = useState("");
+  const [precoVenda, setPrecoVenda] = useState("");
+
+  const resetForm = () => {
+    setNome("");
+    setSku("");
+    setPrecoCusto("");
+    setPrecoVenda("");
+  };
+
+  const createProdutoMutation = useMutation({
+    mutationFn: (payload: {
+      nome: string;
+      sku: string;
+      preco_custo: number;
+      preco_venda: number;
+      ativo: boolean;
+    }) => erpRepository.createProduto(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["produtos"] });
+      toast.success("Produto cadastrado com sucesso.");
+      setOpen(false);
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Não foi possível salvar o produto.");
+    },
+  });
+
+  const handleSubmit = () => {
+    const payload = {
+      nome: nome.trim(),
+      sku: sku.trim(),
+      preco_custo: Number(precoCusto),
+      preco_venda: Number(precoVenda),
+      ativo: true,
+    };
+
+    if (!payload.nome || !payload.sku || Number.isNaN(payload.preco_custo) || Number.isNaN(payload.preco_venda)) {
+      toast.error("Preencha nome, SKU e os preços corretamente.");
+      return;
+    }
+
+    createProdutoMutation.mutate(payload);
+  };
 
   return (
     <>
@@ -68,22 +114,33 @@ function ProdutosPage() {
 
       <FormModal
         open={open}
-        onOpenChange={setOpen}
-        title="Novo produto"
-        description="Cadastro disponível após a conexão com o banco de dados."
-        onSubmit={() => {
-          toast.info("Banco de dados ainda não conectado.");
-          setOpen(false);
+        onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) {
+            resetForm();
+          }
         }}
+        title="Novo produto"
+        description="Cadastre um novo produto no catálogo."
+        onSubmit={handleSubmit}
+        submitting={createProdutoMutation.isPending}
       >
         <FormField id="nome" label="Nome" value={nome} onChange={setNome} placeholder="Cookie 90g" />
-        <FormField id="sabor" label="Sabor" value={sabor} onChange={setSabor} placeholder="Belga" />
+        <FormField id="sku" label="SKU" value={sku} onChange={setSku} placeholder="CK-001" />
         <FormField
-          id="preco"
+          id="precoCusto"
+          label="Preço de custo"
+          type="number"
+          value={precoCusto}
+          onChange={setPrecoCusto}
+          placeholder="0,00"
+        />
+        <FormField
+          id="precoVenda"
           label="Preço de venda"
           type="number"
-          value={preco}
-          onChange={setPreco}
+          value={precoVenda}
+          onChange={setPrecoVenda}
           placeholder="0,00"
         />
       </FormModal>
