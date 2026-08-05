@@ -1,12 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Cookie,
   DollarSign,
-  Package,
   ShoppingCart,
   TrendingUp,
-  Users,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
