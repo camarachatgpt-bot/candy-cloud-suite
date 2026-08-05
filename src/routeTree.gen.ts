@@ -20,6 +20,7 @@ import { Route as MetasRouteImport } from './routes/metas'
 import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as VendasRouteImport } from './routes/vendas'
+import { Route as VendasIndexRouteImport } from './routes/vendas.index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -76,6 +77,11 @@ const VendasRoute = VendasRouteImport.update({
   path: '/vendas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VendasIndexRoute = VendasIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => VendasRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -88,7 +94,8 @@ export interface FileRoutesByFullPath {
   '/metas': typeof MetasRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
-  '/vendas': typeof VendasRoute
+  '/vendas': typeof VendasRouteWithChildren
+  '/vendas/': typeof VendasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -101,7 +108,7 @@ export interface FileRoutesByTo {
   '/metas': typeof MetasRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
-  '/vendas': typeof VendasRoute
+  '/vendas': typeof VendasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -115,7 +122,8 @@ export interface FileRoutesById {
   '/metas': typeof MetasRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
-  '/vendas': typeof VendasRoute
+  '/vendas': typeof VendasRouteWithChildren
+  '/vendas/': typeof VendasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +139,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/vendas'
+    | '/vendas/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/vendas'
+    | '/vendas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -170,7 +180,7 @@ export interface RootRouteChildren {
   MetasRoute: typeof MetasRoute
   ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
-  VendasRoute: typeof VendasRoute
+  VendasRoute: typeof VendasRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -252,8 +262,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vendas/': {
+      id: '/vendas/'
+      path: '/'
+      fullPath: '/vendas/'
+      preLoaderRoute: typeof VendasIndexRouteImport
+      parentRoute: typeof VendasRoute
+    }
   }
 }
+
+interface VendasRouteChildren {
+  VendasIndexRoute: typeof VendasIndexRoute
+}
+
+const VendasRouteChildren: VendasRouteChildren = {
+  VendasIndexRoute: VendasIndexRoute,
+}
+
+const VendasRouteWithChildren =
+  VendasRoute._addFileChildren(VendasRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -266,8 +294,18 @@ const rootRouteChildren: RootRouteChildren = {
   MetasRoute: MetasRoute,
   ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
-  VendasRoute: VendasRoute,
+  VendasRoute: VendasRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
