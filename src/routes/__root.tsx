@@ -7,10 +7,19 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { Bell, Search } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
+
+import { AppSidebar } from "@/components/app-sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+
 
 function NotFoundComponent() {
   return (
@@ -77,19 +86,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Candy ERP — Gestão para confeitaria de cookies" },
+      {
+        name: "description",
+        content:
+          "ERP moderno para confeitarias de cookies gourmet: produtos, estoque, vendas, financeiro e metas.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: appCss,
+        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
@@ -102,7 +114,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <head>
         <HeadContent />
       </head>
@@ -119,8 +131,39 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full bg-background font-sans">
+          <AppSidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/80 px-4 backdrop-blur-xl sm:px-6">
+              <SidebarTrigger className="rounded-lg" />
+              <div className="relative hidden min-w-0 flex-1 sm:block">
+                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar produtos, pedidos, clientes..."
+                  className="h-10 max-w-md rounded-xl pl-9"
+                />
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                <Button variant="ghost" size="icon" className="rounded-full" aria-label="Notificações">
+                  <Bell className="h-4 w-4" />
+                </Button>
+                <ThemeToggle />
+                <Avatar className="ml-1 h-9 w-9">
+                  <AvatarFallback className="bg-primary-soft text-xs font-semibold text-accent-foreground">
+                    CE
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            </header>
+            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
     </QueryClientProvider>
   );
 }
+
