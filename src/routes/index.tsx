@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Cookie,
   DollarSign,
+  Package,
   ShoppingCart,
   TrendingUp,
 } from "lucide-react";
