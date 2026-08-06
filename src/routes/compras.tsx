@@ -8,6 +8,15 @@ import type { Column } from "@/components/erp/data-table";
 import { FormField } from "@/components/erp/form-field";
 import { FormModal } from "@/components/erp/form-modal";
 import { ResourcePage } from "@/components/erp/resource-page";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +32,24 @@ import { erpRepository } from "@/lib/erp/repository";
 import { handleErpError } from "@/lib/erp/error-handler";
 import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Compra, Fornecedor, Ingrediente, ItemCompra } from "@/lib/erp/types";
+
+const AUTO_ATUALIZAR_CUSTO_PELA_ULTIMA_COMPRA = false;
+
+interface CostUpdateDecision {
+  ingrediente_id: string;
+  atualizar: boolean;
+  preco_pago: number;
+  quantidade_compra: number;
+  unidade_compra: string;
+  custo_unitario_novo: number;
+}
+
+interface CostUpdatePrompt {
+  ingredienteNome: string;
+  custoAtual: number;
+  novoCusto: number;
+  resolve: (decision: boolean) => void;
+}
 
 export const Route = createFileRoute("/compras")({
   head: () => ({
@@ -60,6 +87,8 @@ function ComprasPage() {
   const [observacao, setObservacao] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
   const [parcelamento, setParcelamento] = useState({ parcelas: "1", intervaloDias: "30" });
+  const [resolvendoAtualizacaoCustos, setResolvendoAtualizacaoCustos] = useState(false);
+  const [costUpdatePrompt, setCostUpdatePrompt] = useState<CostUpdatePrompt | null>(null);
   const [itens, setItens] = useState<Array<{
     ingrediente_id: string;
     ingrediente_nome: string | null;
@@ -111,6 +140,7 @@ function ComprasPage() {
       data_compra: string;
       observacao: string | null;
       total: number;
+      atualizacoes_custo?: CostUpdateDecision[];
       itens: Array<{
         ingrediente_id: string;
         ingrediente_nome: string | null;
@@ -151,6 +181,7 @@ function ComprasPage() {
       data_compra: string;
       observacao: string | null;
       total: number;
+      atualizacoes_custo?: CostUpdateDecision[];
       itens: Array<{
         ingrediente_id: string;
         ingrediente_nome: string | null;
@@ -254,12 +285,82 @@ function ComprasPage() {
       itens: payloadItens,
     };
 
-    if (editingId) {
-      updateCompraMutation.mutate({ id: editingId, ...payload });
-      return;
-    }
+    const solicitarAtualizacaoCusto = (input: {
+      ingredienteNome: string;
+      custoAtual: number;
+      novoCusto: number;
+    }): Promise<boolean> => {
+      return new Promise((resolve) => {
+        setCostUpdatePrompt({
+          ingredienteNome: input.ingredienteNome,
+          custoAtual: input.custoAtual,
+          novoCusto: input.novoCusto,
+          resolve,
+        });
+      });
+    };
 
-    createCompraMutation.mutate(payload);
+    const confirmarAtualizacoes = async (): Promise<CostUpdateDecision[]> => {
+      const diferencas = payloadItens
+        .map((item) => {
+          const ingrediente = ingredientes.find((entry: Ingrediente) => entry.id === item.ingrediente_id);
+          const custoAtual = Number(ingrediente?.custo_unitario ?? 0);
+          const novoCusto = Number(item.valor_unitario ?? 0);
+          const custoAlterado = Math.abs(custoAtual - novoCusto) > 0.000001;
+
+          return {
+            item,
+            ingrediente,
+            custoAtual,
+            novoCusto,
+            custoAlterado,
+          };
+        })
+        .filter((entry) => entry.custoAlterado && entry.ingrediente);
+
+      if (diferencas.length === 0) {
+        return [];
+      }
+
+      const decisoes: CostUpdateDecision[] = [];
+
+      for (const diferenca of diferencas) {
+        const shouldUpdate = AUTO_ATUALIZAR_CUSTO_PELA_ULTIMA_COMPRA
+          ? true
+          : await solicitarAtualizacaoCusto({
+              ingredienteNome: diferenca.ingrediente?.nome ?? "Ingrediente",
+              custoAtual: diferenca.custoAtual,
+              novoCusto: diferenca.novoCusto,
+            });
+
+        decisoes.push({
+          ingrediente_id: diferenca.item.ingrediente_id,
+          atualizar: shouldUpdate,
+          preco_pago: diferenca.item.valor_total,
+          quantidade_compra: diferenca.item.quantidade,
+          unidade_compra: diferenca.item.unidade,
+          custo_unitario_novo: diferenca.novoCusto,
+        });
+      }
+
+      return decisoes;
+    };
+
+    const persistirCompra = async () => {
+      setResolvendoAtualizacaoCustos(true);
+      const atualizacoes_custo = await confirmarAtualizacoes();
+
+      if (editingId) {
+        updateCompraMutation.mutate({ id: editingId, ...payload, atualizacoes_custo });
+        setResolvendoAtualizacaoCustos(false);
+        return;
+      }
+
+      createCompraMutation.mutate({ ...payload, atualizacoes_custo });
+      setResolvendoAtualizacaoCustos(false);
+    };
+
+    void persistirCompra();
   };
 
   return (
@@ -319,9 +420,9 @@ function ComprasPage() {
           }
         }}
         title={editingId ? "Editar compra" : "Nova compra"}
-        description="Cadastre uma compra e atualize estoque e custos automaticamente."
+        description="Cadastre uma compra e atualize o estoque. Se o custo mudar, você poderá confirmar a atualização no cadastro do ingrediente."
         onSubmit={handleSubmit}
-        submitting={createCompraMutation.isPending || updateCompraMutation.isPending}
+        submitting={createCompraMutation.isPending || updateCompraMutation.isPending || resolvendoAtualizacaoCustos}
         submitLabel={editingId ? "Atualizar" : "Salvar"}
       >
         <div className="space-y-2">
@@ -435,6 +536,52 @@ function ComprasPage() {
           </div>
         </div>
       </FormModal>
+
+      <AlertDialog
+        open={Boolean(costUpdatePrompt)}
+        onOpenChange={(isOpen) => {
+          if (!isOpen && costUpdatePrompt) {
+            costUpdatePrompt.resolve(false);
+            setCostUpdatePrompt(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>O custo deste ingrediente mudou.</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ingrediente: {costUpdatePrompt?.ingredienteNome ?? "Ingrediente"}
+              <br />
+              Custo atual: {formatCurrency(costUpdatePrompt?.custoAtual ?? 0)}
+              <br />
+              Novo custo calculado pela compra: {formatCurrency(costUpdatePrompt?.novoCusto ?? 0)}
+              <br />
+              Deseja atualizar o custo deste ingrediente utilizando o valor da última compra?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                if (!costUpdatePrompt) return;
+                costUpdatePrompt.resolve(false);
+                setCostUpdatePrompt(null);
+              }}
+            >
+              Manter custo atual
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!costUpdatePrompt) return;
+                costUpdatePrompt.resolve(true);
+                setCostUpdatePrompt(null);
+              }}
+            >
+              Atualizar custo
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

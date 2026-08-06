@@ -26,7 +26,49 @@ import { ErpRouteError } from "@/lib/erp/route-error";
 import type { Ingrediente } from "@/lib/erp/types";
 
 const UNIDADE_OPTIONS = ["kg", "g", "ml", "un"] as const;
+const UNIDADE_COMPRA_OPTIONS = ["g", "kg", "ml", "L", "un", "pacote", "caixa"] as const;
 const DEFAULT_UNIDADE = UNIDADE_OPTIONS[0] ?? "kg";
+const DEFAULT_UNIDADE_COMPRA = UNIDADE_COMPRA_OPTIONS[0] ?? "g";
+
+function parseDecimalValue(value: string): number {
+  const raw = value.trim();
+  const normalized = raw.includes(",") && raw.includes(".")
+    ? raw.replace(/\./g, "").replace(",", ".")
+    : raw.replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function converterQuantidadeParaUnidadeBase(quantidadeCompra: number, unidadeCompra: string): number {
+  if (unidadeCompra === "kg" || unidadeCompra === "L") {
+    return quantidadeCompra * 1000;
+  }
+
+  return quantidadeCompra;
+}
+
+function obterUnidadeCustoCalculado(unidadeCompra: string): string {
+  if (unidadeCompra === "kg") return "g";
+  if (unidadeCompra === "L") return "ml";
+  return unidadeCompra;
+}
+
+function formatCalculatedCost(value: number): string {
+  const minimumFractionDigits = value > 0 && value < 1 ? 5 : 2;
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits,
+    maximumFractionDigits: 5,
+  }).format(value);
+}
+
+function getLegacyUnidadeCompra(unidade: string): string {
+  if (unidade === "kg") return "g";
+  if (unidade === "L") return "ml";
+  if ((UNIDADE_COMPRA_OPTIONS as readonly string[]).includes(unidade)) return unidade;
+  return "un";
+}
 
 export const Route = createFileRoute("/ingredientes")({
   head: () => ({
@@ -88,7 +130,9 @@ function IngredientesPage() {
   const [unidade, setUnidade] = useState<string>(DEFAULT_UNIDADE);
   const [quantidade, setQuantidade] = useState("");
   const [estoqueMinimo, setEstoqueMinimo] = useState("");
-  const [custoUnitario, setCustoUnitario] = useState("");
+  const [precoPago, setPrecoPago] = useState("");
+  const [quantidadeComprada, setQuantidadeComprada] = useState("");
+  const [unidadeCompra, setUnidadeCompra] = useState<string>(DEFAULT_UNIDADE_COMPRA);
   const [fornecedor, setFornecedor] = useState("");
 
   const categoriaOptions = useMemo(
@@ -124,6 +168,29 @@ function IngredientesPage() {
       });
   }, [categoriaFiltro, ingredientes, search]);
 
+  const precoPagoNumero = useMemo(() => parseDecimalValue(precoPago), [precoPago]);
+  const quantidadeCompradaNumero = useMemo(() => parseDecimalValue(quantidadeComprada), [quantidadeComprada]);
+
+  const custoUnitarioCalculado = useMemo(() => {
+    if (Number.isNaN(precoPagoNumero) || Number.isNaN(quantidadeCompradaNumero)) {
+      return Number.NaN;
+    }
+
+    if (quantidadeCompradaNumero <= 0) {
+      return Number.NaN;
+    }
+
+    const quantidadeBase = converterQuantidadeParaUnidadeBase(quantidadeCompradaNumero, unidadeCompra);
+
+    if (quantidadeBase <= 0) {
+      return Number.NaN;
+    }
+
+    return precoPagoNumero / quantidadeBase;
+  }, [precoPagoNumero, quantidadeCompradaNumero, unidadeCompra]);
+
+  const unidadeCustoCalculado = useMemo(() => obterUnidadeCustoCalculado(unidadeCompra), [unidadeCompra]);
+
   const resetForm = () => {
     setEditingId(null);
     setNome("");
@@ -131,7 +198,9 @@ function IngredientesPage() {
     setUnidade(DEFAULT_UNIDADE);
     setQuantidade("");
     setEstoqueMinimo("");
-    setCustoUnitario("");
+    setPrecoPago("");
+    setQuantidadeComprada("");
+    setUnidadeCompra(DEFAULT_UNIDADE_COMPRA);
     setFornecedor("");
   };
 
@@ -147,7 +216,9 @@ function IngredientesPage() {
     setUnidade(item.unidade ?? DEFAULT_UNIDADE);
     setQuantidade(String(item.quantidade));
     setEstoqueMinimo(String(item.estoque_minimo));
-    setCustoUnitario(String(item.custo_unitario));
+    setPrecoPago(item.preco_pago == null ? String(item.custo_unitario) : String(item.preco_pago));
+    setQuantidadeComprada(item.quantidade_compra == null ? "1" : String(item.quantidade_compra));
+    setUnidadeCompra(item.unidade_compra ?? getLegacyUnidadeCompra(item.unidade));
     setFornecedor(item.fornecedor ?? "");
     setOpen(true);
   };
@@ -161,6 +232,9 @@ function IngredientesPage() {
       quantidade: number;
       estoque_minimo: number;
       custo_unitario: number;
+      preco_pago: number;
+      quantidade_compra: number;
+      unidade_compra: string;
       fornecedor: string | null;
       ativo: boolean;
     }) => erpRepository.createIngrediente(payload),
@@ -192,6 +266,9 @@ function IngredientesPage() {
       quantidade: number;
       estoque_minimo: number;
       custo_unitario: number;
+      preco_pago: number;
+      quantidade_compra: number;
+      unidade_compra: string;
       fornecedor: string | null;
       ativo: boolean;
     }) => erpRepository.updateIngrediente(payload.id, payload),
@@ -251,7 +328,10 @@ function IngredientesPage() {
       unidade: unidade.trim() || UNIDADE_OPTIONS[0],
       quantidade: Number(quantidade),
       estoque_minimo: Number(estoqueMinimo),
-      custo_unitario: Number(custoUnitario),
+      custo_unitario: custoUnitarioCalculado,
+      preco_pago: precoPagoNumero,
+      quantidade_compra: quantidadeCompradaNumero,
+      unidade_compra: unidadeCompra,
       fornecedor: fornecedor.trim() || null,
       ativo: true,
     };
@@ -264,9 +344,16 @@ function IngredientesPage() {
     if (
       Number.isNaN(payload.quantidade) ||
       Number.isNaN(payload.estoque_minimo) ||
+      Number.isNaN(payload.preco_pago) ||
+      Number.isNaN(payload.quantidade_compra) ||
       Number.isNaN(payload.custo_unitario)
     ) {
-      toast.error("Quantidade, estoque mínimo e custo unitário devem ser números válidos.");
+      toast.error("Quantidade, estoque mínimo, preço pago e quantidade comprada devem ser números válidos.");
+      return;
+    }
+
+    if (payload.quantidade_compra <= 0) {
+      toast.error("A quantidade comprada deve ser maior que zero.");
       return;
     }
 
@@ -401,13 +488,49 @@ function IngredientesPage() {
           placeholder="0"
         />
         <FormField
-          id="custoUnitario"
-          label="Custo unitário"
-          type="number"
-          value={custoUnitario}
-          onChange={setCustoUnitario}
+          id="precoPago"
+          label="Preço pago (R$)"
+          value={precoPago}
+          onChange={setPrecoPago}
           placeholder="0,00"
         />
+        <FormField
+          id="quantidadeComprada"
+          label="Quantidade comprada"
+          type="number"
+          value={quantidadeComprada}
+          onChange={setQuantidadeComprada}
+          placeholder="1"
+        />
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Unidade da compra</label>
+          <Select value={unidadeCompra} onValueChange={(value) => setUnidadeCompra(value)}>
+            <SelectTrigger className="rounded-xl">
+              <SelectValue placeholder="Selecione a unidade de compra" />
+            </SelectTrigger>
+            <SelectContent>
+              {UNIDADE_COMPRA_OPTIONS.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Custo unitário calculado</label>
+          <Input
+            readOnly
+            value={
+              Number.isNaN(custoUnitarioCalculado)
+                ? "Preencha preço, quantidade e unidade da compra"
+                : `${formatCalculatedCost(custoUnitarioCalculado)}/${unidadeCustoCalculado}`
+            }
+            className="rounded-xl"
+          />
+        </div>
         <FormField
           id="fornecedor"
           label="Fornecedor"

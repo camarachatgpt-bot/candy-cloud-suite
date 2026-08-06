@@ -1439,6 +1439,9 @@ export const erpRepository = {
       quantidade: Number(item.quantidade ?? 0),
       estoque_minimo: Number(item.estoque_minimo ?? 0),
       custo_unitario: Number(item.custo_unitario ?? 0),
+      preco_pago: item.preco_pago == null ? null : Number(item.preco_pago),
+      quantidade_compra: item.quantidade_compra == null ? null : Number(item.quantidade_compra),
+      unidade_compra: item.unidade_compra ?? null,
       fornecedor: item.fornecedor ?? null,
       observacao: item.observacao ?? null,
       ativo: item.ativo,
@@ -1477,6 +1480,9 @@ export const erpRepository = {
     quantidade: number;
     estoque_minimo: number;
     custo_unitario: number;
+    preco_pago?: number | null;
+    quantidade_compra?: number | null;
+    unidade_compra?: string | null;
     fornecedor: string | null;
     observacao?: string | null;
     ativo: boolean;
@@ -1492,6 +1498,9 @@ export const erpRepository = {
           quantidade: input.quantidade,
           estoque_minimo: input.estoque_minimo,
           custo_unitario: input.custo_unitario,
+          preco_pago: input.preco_pago ?? null,
+          quantidade_compra: input.quantidade_compra ?? null,
+          unidade_compra: input.unidade_compra ?? null,
           fornecedor: input.fornecedor,
           observacao: input.observacao ?? null,
           ativo: input.ativo,
@@ -1523,6 +1532,9 @@ export const erpRepository = {
       quantidade: Number(data.quantidade ?? 0),
       estoque_minimo: Number(data.estoque_minimo ?? 0),
       custo_unitario: Number(data.custo_unitario ?? 0),
+      preco_pago: data.preco_pago == null ? null : Number(data.preco_pago),
+      quantidade_compra: data.quantidade_compra == null ? null : Number(data.quantidade_compra),
+      unidade_compra: data.unidade_compra ?? null,
       fornecedor: data.fornecedor ?? null,
       ativo: data.ativo,
       created_at: data.created_at,
@@ -1536,6 +1548,9 @@ export const erpRepository = {
     quantidade: number;
     estoque_minimo: number;
     custo_unitario: number;
+    preco_pago?: number | null;
+    quantidade_compra?: number | null;
+    unidade_compra?: string | null;
     fornecedor: string | null;
     observacao?: string | null;
     ativo: boolean;
@@ -1561,6 +1576,9 @@ export const erpRepository = {
         quantidade: input.quantidade,
         estoque_minimo: input.estoque_minimo,
         custo_unitario: input.custo_unitario,
+        preco_pago: input.preco_pago ?? null,
+        quantidade_compra: input.quantidade_compra ?? null,
+        unidade_compra: input.unidade_compra ?? null,
         fornecedor: input.fornecedor,
         observacao: input.observacao ?? null,
         ativo: input.ativo,
@@ -1594,6 +1612,9 @@ export const erpRepository = {
       quantidade: Number(data.quantidade ?? 0),
       estoque_minimo: Number(data.estoque_minimo ?? 0),
       custo_unitario: Number(data.custo_unitario ?? 0),
+      preco_pago: data.preco_pago == null ? null : Number(data.preco_pago),
+      quantidade_compra: data.quantidade_compra == null ? null : Number(data.quantidade_compra),
+      unidade_compra: data.unidade_compra ?? null,
       fornecedor: data.fornecedor ?? null,
       ativo: data.ativo,
       created_at: data.created_at,
@@ -1888,6 +1909,14 @@ export const erpRepository = {
     data_pagamento?: string | null;
     observacao_pagamento?: string | null;
     parcelamento?: { parcelas: number; intervaloDias: number; primeiroVencimento?: string | null } | null;
+    atualizacoes_custo?: Array<{
+      ingrediente_id: string;
+      atualizar: boolean;
+      preco_pago: number;
+      quantidade_compra: number;
+      unidade_compra: string;
+      custo_unitario_novo: number;
+    }>;
     itens: Array<{
       ingrediente_id: string;
       ingrediente_nome: string | null;
@@ -1949,6 +1978,10 @@ export const erpRepository = {
 
     if (itensError) throw itensError;
 
+    const atualizacoesCustoPorIngrediente = new Map(
+      (input.atualizacoes_custo ?? []).map((entry) => [entry.ingrediente_id, entry]),
+    );
+
     for (const item of input.itens) {
       const { data: ingredienteAtual, error: ingredienteFetchError } = await supabase
         .from("ingredientes")
@@ -1960,24 +1993,37 @@ export const erpRepository = {
 
       const estoqueAnterior = Number(ingredienteAtual?.quantidade ?? 0);
       const estoquePosterior = estoqueAnterior + Number(item.quantidade ?? 0);
-      const custoAnterior = Number(ingredienteAtual?.custo_unitario ?? 0);
-      const novoCusto = Number(item.valor_unitario ?? 0);
-      const custoMedio =
-        estoqueAnterior > 0
-          ? (custoAnterior * estoqueAnterior + novoCusto * Number(item.quantidade ?? 0)) / estoquePosterior
-          : novoCusto;
+
+      const atualizacaoCusto = atualizacoesCustoPorIngrediente.get(item.ingrediente_id);
+      const deveAtualizarCusto = Boolean(atualizacaoCusto?.atualizar);
+
+      const payloadAtualizacaoIngrediente: {
+        quantidade: number;
+        custo_unitario?: number;
+        preco_pago?: number;
+        quantidade_compra?: number;
+        unidade_compra?: string;
+      } = {
+        quantidade: estoquePosterior,
+      };
+
+      if (deveAtualizarCusto && atualizacaoCusto) {
+        payloadAtualizacaoIngrediente.custo_unitario = Number(atualizacaoCusto.custo_unitario_novo ?? item.valor_unitario ?? 0);
+        payloadAtualizacaoIngrediente.preco_pago = Number(atualizacaoCusto.preco_pago ?? item.valor_total ?? 0);
+        payloadAtualizacaoIngrediente.quantidade_compra = Number(atualizacaoCusto.quantidade_compra ?? item.quantidade ?? 0);
+        payloadAtualizacaoIngrediente.unidade_compra = atualizacaoCusto.unidade_compra ?? item.unidade;
+      }
 
       const { error: estoqueUpdateError } = await supabase
         .from("ingredientes")
-        .update({
-          quantidade: estoquePosterior,
-          custo_unitario: custoMedio,
-        })
+        .update(payloadAtualizacaoIngrediente)
         .eq("id", item.ingrediente_id);
 
       if (estoqueUpdateError) throw estoqueUpdateError;
 
-      await recalcularReceitasPorIngrediente(item.ingrediente_id);
+      if (deveAtualizarCusto) {
+        await recalcularReceitasPorIngrediente(item.ingrediente_id);
+      }
 
       await registrarMovimentacaoEstoque({
         empresa_id: input.empresa_id,
@@ -2046,6 +2092,14 @@ export const erpRepository = {
     data_pagamento?: string | null;
     observacao_pagamento?: string | null;
     parcelamento?: { parcelas: number; intervaloDias: number; primeiroVencimento?: string | null } | null;
+    atualizacoes_custo?: Array<{
+      ingrediente_id: string;
+      atualizar: boolean;
+      preco_pago: number;
+      quantidade_compra: number;
+      unidade_compra: string;
+      custo_unitario_novo: number;
+    }>;
     itens: Array<{
       ingrediente_id: string;
       ingrediente_nome: string | null;
@@ -2070,6 +2124,7 @@ export const erpRepository = {
       data_pagamento: input.data_pagamento ?? null,
       observacao_pagamento: input.observacao_pagamento ?? null,
       parcelamento: input.parcelamento ?? null,
+      atualizacoes_custo: input.atualizacoes_custo ?? [],
       itens: input.itens,
     });
   },

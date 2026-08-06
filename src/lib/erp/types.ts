@@ -83,6 +83,9 @@ export interface Ingrediente {
   quantidade: number;
   estoque_minimo: number;
   custo_unitario: number;
+  preco_pago?: number | null;
+  quantidade_compra?: number | null;
+  unidade_compra?: string | null;
   fornecedor: string | null;
   observacao?: string | null;
   ativo: boolean;
